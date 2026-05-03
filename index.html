@@ -1668,6 +1668,30 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_KEY, {
     .directSyncStatus{font-size:11px;color:var(--muted);font-weight:800;min-width:180px;}
     .directSyncStatus.ok{color:var(--ok);}.directSyncStatus.err{color:#991b1b;}
     .directSmallHelp{font-size:11px;color:var(--muted);} @media (max-width: 900px){.directSection.reportSubrelief,.directSection.reportIssue,.directSection.reportEntry{margin-left:0}.directQaRow{grid-template-columns:1fr}.directQaDrag{display:none}}
+
+    /* Discovery portal */
+    body.discovery-screen-wide .topbar-inner, body.discovery-screen-wide .tabs, body.discovery-screen-wide .container{max-width:none;width:100%;padding-left:24px;padding-right:24px;}
+    .discoveryPage{padding:12px;display:grid;gap:14px;}
+    .discoveryTop{display:flex;justify-content:space-between;gap:12px;align-items:flex-start;flex-wrap:wrap;}
+    .discoveryModeBar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;}
+    .discoveryGrid{display:grid;grid-template-columns:minmax(320px,420px) minmax(520px,1fr);gap:14px;align-items:start;}
+    .discoveryReviewCard,.discoveryClientCard{border:1px solid var(--border);border-radius:16px;background:#fff;padding:14px;box-shadow:var(--shadow2);display:grid;gap:10px;}
+    .discoverySummaryTable{width:100%;border-collapse:collapse;background:#fff;min-width:780px;}
+    .discoverySummaryTable th,.discoverySummaryTable td{border:1px solid var(--border);padding:10px;text-align:left;vertical-align:middle;}
+    .discoverySummaryTable th{background:#f8fbff;font-weight:900;}
+    .discoverySummaryTable td.center{text-align:center;font-weight:900;font-size:18px;}
+    .discoveryClickable{cursor:pointer;color:var(--brand2);text-decoration:underline;text-underline-offset:3px;}
+    .discoveryRequestRow{border:1px solid var(--border);border-radius:14px;background:#fff;padding:12px;display:grid;gap:10px;}
+    .discoveryRequestRow.hiddenFromClient{opacity:.65;background:#f8fafc;}
+    .discoveryRequestTop{display:flex;justify-content:space-between;gap:10px;align-items:flex-start;flex-wrap:wrap;}
+    .discoveryReqText{white-space:pre-wrap;line-height:1.45;}
+    .discoveryReqNumber{font-weight:900;color:var(--brand2);}
+    .discoveryClientAnswers{display:grid;gap:10px;}
+    .discoveryFileList{display:grid;gap:6px;}
+    .discoveryFilePill{display:flex;justify-content:space-between;gap:8px;align-items:center;border:1px solid var(--border);border-radius:999px;background:var(--surface2);padding:6px 10px;font-size:12px;font-weight:800;}
+    .discoveryStatusPill{display:inline-flex;align-items:center;gap:6px;padding:5px 10px;border-radius:999px;border:1px solid rgba(37,99,235,.24);background:rgba(37,99,235,.08);color:var(--brand2);font-size:12px;font-weight:900;}
+    @media (max-width: 1000px){.discoveryGrid{grid-template-columns:1fr}.discoverySummaryTable{min-width:680px}}
+
   </style>
 </head>
 <body>
@@ -1723,13 +1747,59 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_KEY, {
       </div>
     </div>
   </div>
-  <div class="tabs" id="mainTabs" style="display:none"><a id="tabOutline" class="tab active" data-view-link="outline" href="?view=outline">Case Outline</a><a id="tabDocuments" class="tab" data-view-link="documents" href="?view=documents">Documents</a><a id="tabPeople" class="tab" data-view-link="people" href="?view=people">People</a><a id="tabElements" class="tab" data-view-link="elements" href="?view=elements">Elements</a><a id="tabTimeline" class="tab" data-view-link="timeline" href="?view=timeline">Timeline</a><a id="tabTrialIssues" class="tab" data-view-link="trialissues" href="?view=trialissues">Trial Issues</a><a id="tabReports" class="tab" data-view-link="reports" href="?view=reports">Reports</a><a id="tabCross" class="tab" data-view-link="cross" href="?view=cross">Cross</a><a id="tabMattDirect" class="tab" data-view-link="mattdirect" href="?view=mattdirect">Matt Direct</a><a id="tabTrialIssuesExhibits" class="tab" data-view-link="trialissuesexhibits" href="?view=trialissuesexhibits" style="display:none">Trial Issues Exhibits</a><a id="tabDocumentAnalysis" class="tab" data-view-link="documentanalysis" href="?view=documentanalysis">Document Analysis</a><a id="tabSettings" class="tab" data-view-link="settings" href="?view=settings">Add Tag</a></div>
+  <div class="tabs" id="mainTabs" style="display:none"><a id="tabOutline" class="tab active" data-view-link="outline" href="?view=outline">Case Outline</a><a id="tabDocuments" class="tab" data-view-link="documents" href="?view=documents">Documents</a><a id="tabPeople" class="tab" data-view-link="people" href="?view=people">People</a><a id="tabElements" class="tab" data-view-link="elements" href="?view=elements">Elements</a><a id="tabTimeline" class="tab" data-view-link="timeline" href="?view=timeline">Timeline</a><a id="tabTrialIssues" class="tab" data-view-link="trialissues" href="?view=trialissues">Trial Issues</a><a id="tabReports" class="tab" data-view-link="reports" href="?view=reports">Reports</a><a id="tabCross" class="tab" data-view-link="cross" href="?view=cross">Cross</a><a id="tabMattDirect" class="tab" data-view-link="mattdirect" href="?view=mattdirect">Matt Direct</a><a id="tabTrialIssuesExhibits" class="tab" data-view-link="trialissuesexhibits" href="?view=trialissuesexhibits" style="display:none">Trial Issues Exhibits</a><a id="tabDocumentAnalysis" class="tab" data-view-link="documentanalysis" href="?view=documentanalysis">Document Analysis</a><a id="tabDiscovery" class="tab" data-view-link="discovery" href="?view=discovery">Discovery</a><a id="tabSettings" class="tab" data-view-link="settings" href="?view=settings">Add Tag</a></div>
   <div class="container" id="appContainer" style="display:none">
     <div id="viewOutline" class="card"><div style="display:flex;justify-content:space-between;gap:10px;align-items:center;flex-wrap:wrap"><h2 style="margin:0">Case Outline</h2><div style="display:flex;gap:8px;flex-wrap:wrap"><a class="btnGhost docOpenLink" data-view-link="outlineindex" href="?view=outlineindex">Outline Index</a><a class="btnGhost docOpenLink" data-view-link="structuredoutline" href="?view=structuredoutline">Structured Outline</a></div></div><div class="hint">Build a structured outline and then tie it to witnesses, exhibits, and testimony. Add witnesses to a row to create witness columns. In each witness column cell, select exhibits (from Documents) and add testimony.</div>
       <div class="toolbar" style="align-items:flex-start"><div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center"><button id="addTop" class="btnPrimary">+ Add top-level heading</button><button id="collapseAll" class="btnGhost">Collapse all</button><button id="expandAll" class="btnGhost">Expand all</button><button id="structureViewToggle" class="btnGhost">Structure view</button><button id="outlineCompactToggle" class="btnGhost">Name-only view</button><div id="outlineTagFilterHost"></div><div id="outlineWitnessFilterHost"></div></div><div style="height:1px; flex-basis:100%"></div><div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center"><span class="pill" id="selHint">Select a row, then use these controls</span><button id="actSibling" class="btnGhost">+ Sibling</button><button id="actChild" class="btnGhost">+ Child</button><button id="actIndent" class="btnGhost">↳ Indent</button><button id="actOutdent" class="btnGhost">↰ Outdent</button><button id="actUp" class="btnGhost">↑</button><button id="actDown" class="btnGhost">↓</button><button id="actDelete" class="btnDanger">Delete</button><span style="width:12px"></span><button id="actAddExhibit" class="btnPrimary">+ Add exhibit</button><span class="pill" id="exHint">Click a witness cell, select a document, then Add exhibit</span></div></div>
       <div id="outlineEmpty" class="empty" style="display:none; margin-top:12px">No outline items yet. Click “Add top-level heading”.</div>
       <div id="matrixWrap" class="matrixWrap" style="display:none"><div id="matrix" class="matrix"></div></div>
     </div>
+
+    <div id="viewDiscovery" class="card discoveryPage" style="display:none">
+      <div class="discoveryTop">
+        <div>
+          <h2 style="margin-bottom:8px">Discovery</h2>
+          <div class="hint">Upload Interrogatories, Requests for Disclosure, Requests for Production, or Requests for Admission. Review extracted requests before sending them to the client. Clients only see published requests and response boxes.</div>
+        </div>
+        <div class="discoveryModeBar">
+          <button id="discoveryAttorneyModeBtn" type="button" class="btnPrimary">Attorney intake/review</button>
+          <button id="discoveryClientModeBtn" type="button" class="btnGhost">Client response view</button>
+          <button id="discoveryRefreshBtn" type="button" class="btnGhost">Refresh</button>
+          <button id="discoveryExportWordBtn" type="button" class="btnPrimary">Download Word responses</button>
+        </div>
+      </div>
+      <div id="discoverySetupWarning" class="setupBox hidden"></div>
+      <div class="card" style="box-shadow:none;overflow:auto">
+        <div style="display:flex;justify-content:space-between;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:10px">
+          <div><h2 style="margin:0">Client discovery dashboard</h2><div class="hint">Click an “x” to open that discovery set.</div></div>
+        </div>
+        <div id="discoveryDashboardHost"></div>
+      </div>
+      <div id="discoveryAttorneyPane" class="discoveryGrid">
+        <div class="discoveryReviewCard">
+          <h2 style="margin:0">Upload and extract</h2>
+          <div><div class="label">Discovery type</div><select id="discoveryUploadType"><option value="interrogatories">Interrogatories</option><option value="disclosures">Request for Disclosure</option><option value="production">Request for Production</option><option value="admissions">Request for Admissions</option></select></div>
+          <div><div class="label">Title</div><input id="discoveryTitle" type="text" placeholder="e.g., OC First Set of Interrogatories" /></div>
+          <div><div class="label">Date received</div><input id="discoveryDateReceived" type="date" /></div>
+          <div><div class="label">Client response due</div><input id="discoveryClientDue" type="date" /></div>
+          <div><div class="label">Upload PDF, DOCX, or TXT</div><input id="discoveryUploadFile" type="file" accept=".pdf,.doc,.docx,.txt,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain" /></div>
+          <div class="hint">This page extracts text in the browser, then sends it to your Supabase Edge Function <b>extract-discovery</b>. If the function is not deployed yet, it uses a basic local numbered-paragraph fallback so you can test the page.</div>
+          <button id="discoveryExtractBtn" type="button" class="btnPrimary">Extract requests for review</button>
+          <div id="discoveryExtractStatus" class="hint"></div>
+        </div>
+        <div class="discoveryReviewCard">
+          <div style="display:flex;justify-content:space-between;gap:10px;align-items:center;flex-wrap:wrap"><h2 style="margin:0">Attorney review</h2><span id="discoverySelectedSetPill" class="discoveryStatusPill">No set selected</span></div>
+          <div class="hint">Uncheck requests you will answer yourself. Only checked requests are visible in the client response view.</div>
+          <div id="discoveryAttorneyList" style="display:grid;gap:10px"></div>
+        </div>
+      </div>
+      <div id="discoveryClientPane" class="discoveryClientCard" style="display:none">
+        <div style="display:flex;justify-content:space-between;gap:10px;align-items:center;flex-wrap:wrap"><h2 style="margin:0">Client response page</h2><span id="discoveryClientSelectedPill" class="discoveryStatusPill">No set selected</span></div>
+        <div class="hint">Answer each request, add questions/comments for your attorney, and upload files tied to that individual request.</div>
+        <div id="discoveryClientList" class="discoveryClientAnswers"></div>
+      </div>
+    </div>
+
     <div id="viewDocuments" class="card" style="display:none"><h2>Documents</h2><div class="hint">Upload documents for this case. These can be selected as exhibits in the Case Outline witness columns.</div><div class="grid2"><div class="card" style="box-shadow:none"><h2 style="margin-bottom:8px">Add document</h2><div class="hint" style="margin-bottom:10px">Only <b>Name</b> is required. Date/tags/description are optional.</div><div class="label">Document name <span style="color:var(--danger)">*</span></div><input id="docName" type="text" placeholder="e.g., Leah Bankruptcy" /><div class="label" style="margin-top:10px">Document date (optional)</div><input id="docDate" type="date" /><div class="label" style="margin-top:10px">Description (optional)</div><textarea id="docDesc" placeholder="What is this document? What does it prove?"></textarea><div class="label" style="margin-top:10px">Status</div><select id="docStatus"><option value="neither">Neither</option><option value="our exhibit">Our exhibit</option><option value="their exhibit">Their exhibit</option><option value="both">Both</option></select><div class="hint" style="margin-top:10px">Use the Tag + exhibit index to assign tags and filter the document list. Documents are included in the timeline by default, but you can switch that off in the repository.</div><div class="label" style="margin-top:10px">File (optional)</div><input id="docFile" type="file" /><div class="hint" style="margin-top:6px">If you attach a file, it uploads to Supabase Storage so it can be viewed and downloaded from other tabs and computers.</div><div style="margin-top:10px; display:flex; gap:10px; flex-wrap:wrap; align-items:center"><button id="docBulkSelectBtn" type="button" class="btnGhost">Bulk upload documents</button><input id="docBulkFiles" type="file" multiple style="display:none" /></div><div id="docBulkUploadWrap" style="display:none; margin-top:12px"></div><div style="margin-top:10px; display:flex; gap:10px; flex-wrap:wrap; align-items:center"><button id="docAddTagsBtn" type="button" class="btnGhost">Add tags</button><span id="docCreateTagSummary" class="hint">No tags selected.</span></div><div style="margin-top:10px; display:flex; gap:10px; flex-wrap:wrap; align-items:center"><button id="addDoc" class="btnPrimary">Save document</button></div></div><div class="card" style="box-shadow:none"><div style="display:flex; justify-content:space-between; gap:10px; align-items:center; flex-wrap:wrap"><h2 style="margin-bottom:8px">Document repository</h2><div style="display:flex; gap:8px; flex-wrap:wrap"><button id="docRepoFilterToggle" class="btnGhost" type="button">Filters</button><input id="docRepoSearch" type="text" placeholder="Search documents" style="min-width:240px" /><button id="collapseAllDocs" class="btnGhost">Collapse all</button><button id="toggleDownloadList" class="btnGhost">Download documents</button><a class="btnGhost" data-view-link="documenttable" href="?view=documenttable" style="text-decoration:none">Document Table</a><a id="documentWorksheetToggle" class="btnGhost" data-view-link="documenttable" href="?view=documenttable&amp;worksheet=1" style="text-decoration:none">Document Worksheet</a><a class="btnGhost" data-view-link="exhibits" href="?view=exhibits" style="text-decoration:none">Exhibits</a></div></div><div class="hint" style="margin-bottom:10px">Tags are hidden here so this list stays cleaner. Use the Tag Index page for the document-by-tag table, exhibit filters, and heading details.</div><div id="docRepoFilterBar" style="margin:10px 0 14px 0"></div><div id="docDownloadListWrap" style="display:none; margin:10px 0 14px 0"></div><div id="docList" style="display:flex; flex-direction:column; gap:10px"></div><div id="docEmpty" class="empty" style="display:none">No documents yet.</div></div></div></div>
     <div id="viewDocumentTable" class="card" style="display:none"><div style="display:flex; justify-content:space-between; gap:10px; align-items:center; flex-wrap:wrap"><div><h2 style="margin-bottom:8px">Document Table</h2><div class="hint">One document per row. Filter by inclusion and exclusion, edit document tags on the row, open the document, download it, or jump straight into Elements from Document.</div></div><div style="display:flex; gap:8px; flex-wrap:wrap"><a class="btnGhost docOpenLink" data-view-link="documents" href="?view=documents">Back to Documents</a></div></div><div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin-top:12px"><input id="documentTableSearch" type="text" placeholder="Search documents" style="min-width:240px" /><button type="button" id="documentTableFilterToggle" class="btnGhost">Filters</button></div><div id="documentTableFilterPanel" class="elementsFilterPanel" style="display:none; margin-top:12px"><div class="hint" style="margin-bottom:8px">Use the same inclusion and exclusion style as the Elements page.</div><div class="elementsFilterGrid"><div><div class="label">Tags / subtags</div><div id="documentTableFilterTagTree"></div></div><div><div class="label">Exhibit status</div><div id="documentTableFilterExhibit" class="elementsFilterChecklist"></div></div><div><div class="label">Timeline</div><div id="documentTableFilterTimeline" class="elementsFilterChecklist"></div></div><div><div class="label">File</div><div id="documentTableFilterFile" class="elementsFilterChecklist"></div></div><div><div class="label">Document type</div><div id="documentTableFilterType" class="elementsFilterChecklist"></div></div><div><div class="label">Status</div><div id="documentTableFilterStatus" class="elementsFilterChecklist"></div></div></div></div><div id="documentWorksheetWrap" class="elementsWorksheetWrap"><div style="display:flex;justify-content:space-between;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:10px"><div><h3 style="margin:0">Document Worksheet</h3><div class="hint">Use the same worksheet-style tag columns as the Element Worksheet, but for documents.</div></div><div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center"><button type="button" id="documentWorksheetColumnsBtn" class="btnGhost">Columns</button><button type="button" id="documentWorksheetCollapseAllTagsBtn" class="btnGhost">Collapse all columns</button><button type="button" id="documentWorksheetExpandAllTagsBtn" class="btnGhost">Expand all columns</button></div></div><div id="documentWorksheetScrollTop" class="elementsWorksheetScrollTop" style="display:none"><div id="documentWorksheetScrollTopInner" class="elementsWorksheetScrollTopInner"></div></div><div class="elementsWorksheetShell" id="documentWorksheetShell"><div id="documentWorksheetTableHost"></div></div><div id="documentWorksheetScrollDock" class="elementsWorksheetScrollDock"><div id="documentWorksheetScrollDockInner" class="elementsWorksheetScrollDockInner"></div></div></div><div id="documentTableHost" style="margin-top:12px"></div><div id="documentTableEmpty" class="empty" style="display:none">No documents match the current filters.</div></div><div id="viewDocumentAnalysis" class="card documentAnalysisPage" style="display:none"><div style="display:flex;justify-content:space-between;gap:10px;align-items:center;flex-wrap:wrap"><div><h2 style="margin-bottom:8px">Document Analysis</h2><div class="hint">One row per document. Use the document-table-style filters, discuss each document with tagged comments, and score it with the sliders on each side.</div></div><div style="display:flex;gap:8px;flex-wrap:wrap"><a class="btnGhost docOpenLink" data-view-link="documents" href="?view=documents">Back to Documents</a><a class="btnGhost docOpenLink" data-view-link="documenttable" href="?view=documenttable">Document Table</a></div></div><div class="documentAnalysisToolbar"><div class="card" style="padding:12px;flex:1;min-width:320px"><div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center"><input id="documentAnalysisSearch" type="text" placeholder="Search documents" style="min-width:240px" /><button type="button" id="documentAnalysisFilterToggle" class="btnGhost">Filters</button><select id="documentAnalysisSort" class="btnGhost" style="width:auto;min-width:180px"><option value="alpha">Sort: Alphabetical</option><option value="upload_desc">Sort: Upload date</option></select><select id="documentAnalysisDisplay" class="btnGhost" style="width:auto;min-width:260px"><option value="all">Display: All documents</option><option value="matt_exhibits">Display: Matt's trial issue exhibits</option><option value="leah_exhibits">Display: Leah's trial issue exhibits</option><option value="matt_support">Display: Matt's trial issue document/impeachment</option><option value="leah_support">Display: Leah's trial issue documents impeachment</option></select>
       
@@ -2288,7 +2358,7 @@ function normalizeState(){ state.tags = Array.isArray(state.tags) ? state.tags.f
     function syncWitnessCellsFromSupabase(){ if (!Array.isArray(window.loadedWitnessCells)) return; const cellsByRow = new Map(); for (const cell of window.loadedWitnessCells) { if (!cell || !cell.row_id || !cell.person_id) continue; if (!cellsByRow.has(cell.row_id)) cellsByRow.set(cell.row_id, []); cellsByRow.get(cell.row_id).push(cell); } state.outline = (state.outline || []).map((node) => { const rowCells = cellsByRow.get(node.id) || []; const nextWitnessData = {}; const nextWitnessIds = []; for (const cell of rowCells) { nextWitnessIds.push(cell.person_id); const cellKey = testimonyCellKey(cell.row_id, cell.person_id); const localCell = node.witnessData && node.witnessData[cell.person_id] ? node.witnessData[cell.person_id] : null; const testimonyHtml = activeTestimonyEditKey === cellKey && localCell ? (localCell.testimonyHtml || '') : (cell.testimony_html || ''); nextWitnessData[cell.person_id] = { exhibits: Array.isArray(cell.exhibits) ? cell.exhibits : [], testimonyHtml, testimony: testimonyHtml.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim() }; } const localHeadingCell = node.witnessData && node.witnessData[HEADING_EXHIBIT_KEY] ? node.witnessData[HEADING_EXHIBIT_KEY] : null; if(localHeadingCell){ nextWitnessData[HEADING_EXHIBIT_KEY] = { exhibits: Array.isArray(localHeadingCell.exhibits) ? Array.from(new Set(localHeadingCell.exhibits)) : [], testimonyHtml: '', testimony: '' }; } return { ...node, witnessIds: Array.from(new Set(nextWitnessIds)), witnessData: nextWitnessData }; }); safeSave(); }
     window.syncWitnessCellsFromSupabase = syncWitnessCellsFromSupabase;
     window.addEventListener('storage', async (event) => { if (event.key !== window.LOCAL_SYNC_KEY || !event.newValue) return; let payload = null; try { payload = JSON.parse(event.newValue); } catch (e) { console.warn('Bad sync payload:', e); } console.log('Local sync event received:', payload); if (!payload || !payload.type) return; if (payload.type === 'witness_cells_changed') { await window.loadWitnessCells(); return; } if (payload.type === 'rows_changed') { await window.loadOutlineRows(); await window.loadWitnessCells(); return; } if (payload.type === 'people_changed') { await window.loadPeople(); await window.loadWitnessCells(); return; } if (payload.type === 'documents_changed') { await window.loadDocuments(); await window.loadWitnessCells(); return; } if (payload.type === 'tags_changed') { await window.loadTags(); return; } if (payload.type === 'row_tags_changed') { await window.loadRowTags(); return; } if (payload.type === 'document_tags_changed') { await window.loadDocumentTags(); return; } if (payload.type === 'person_tags_changed') { await window.loadPersonTags(); return; } });
-    const views = { outline: { tab: 'tabOutline', view:'viewOutline' }, documents: { tab: 'tabDocuments', view:'viewDocuments' }, documenttable: { tab: 'tabDocumentTable', view:'viewDocumentTable' }, documentanalysis: { tab: 'tabDocumentAnalysis', view:'viewDocumentAnalysis' }, tagindex: { tab: 'tabTagIndex', view:'viewTagIndex' }, outlineindex: { tab: 'tabOutlineIndex', view:'viewOutlineIndex' }, structuredoutline: { tab: 'tabStructuredOutline', view:'viewStructuredOutline' }, exhibits: { tab: 'tabExhibits', view:'viewExhibits' }, people: { tab: 'tabPeople', view:'viewPeople' }, elements: { tab: 'tabElements', view:'viewElements' }, timeline: { tab: 'tabTimeline', view:'viewTimeline' }, trialissues: { tab: 'tabTrialIssues', view:'viewTrialIssues' }, reports: { tab: 'tabReports', view:'viewReports' }, cross: { tab: 'tabCross', view:'viewCross' }, mattdirect: { tab: 'tabMattDirect', view:'viewDirect' }, trialissuesexhibits: { tab: 'tabTrialIssuesExhibits', view:'viewTrialIssuesExhibits' }, settings: { tab: 'tabSettings', view:'viewSettings' } };
+    const views = { outline: { tab: 'tabOutline', view:'viewOutline' }, documents: { tab: 'tabDocuments', view:'viewDocuments' }, documenttable: { tab: 'tabDocumentTable', view:'viewDocumentTable' }, documentanalysis: { tab: 'tabDocumentAnalysis', view:'viewDocumentAnalysis' }, tagindex: { tab: 'tabTagIndex', view:'viewTagIndex' }, outlineindex: { tab: 'tabOutlineIndex', view:'viewOutlineIndex' }, structuredoutline: { tab: 'tabStructuredOutline', view:'viewStructuredOutline' }, exhibits: { tab: 'tabExhibits', view:'viewExhibits' }, people: { tab: 'tabPeople', view:'viewPeople' }, elements: { tab: 'tabElements', view:'viewElements' }, timeline: { tab: 'tabTimeline', view:'viewTimeline' }, trialissues: { tab: 'tabTrialIssues', view:'viewTrialIssues' }, reports: { tab: 'tabReports', view:'viewReports' }, cross: { tab: 'tabCross', view:'viewCross' }, mattdirect: { tab: 'tabMattDirect', view:'viewDirect' }, trialissuesexhibits: { tab: 'tabTrialIssuesExhibits', view:'viewTrialIssuesExhibits' }, discovery: { tab: 'tabDiscovery', view:'viewDiscovery' }, settings: { tab: 'tabSettings', view:'viewSettings' } };
     function getInitialViewFromUrl(){
       try {
         const params = new URLSearchParams(window.location.search || '');
@@ -2322,8 +2392,8 @@ function normalizeState(){ state.tags = Array.isArray(state.tags) ? state.tags.f
         el.setAttribute('href', buildViewHref(viewName));
       });
     }
-    function setTab(which, opts={}){ if(which === 'direct') which = 'mattdirect'; let target = views[which] ? which : 'outline'; if(target === 'mattdirect'){ try{ localStorage.setItem(getDirectPartyStorageKey(), 'matt'); }catch(e){} } if(!canCurrentUserAccessView(target)){ target = firstAllowedView(); } ui.currentView = target; document.body.classList.toggle('tagindex-active', target === 'tagindex'); document.body.classList.toggle('outlineindex-active', target === 'outlineindex'); document.body.classList.toggle('outline-screen-wide', target === 'outline'); document.body.classList.toggle('documenttable-screen-wide', target === 'documenttable' && !!ui.documentWorksheetOpen); document.body.classList.toggle('documentanalysis-screen-wide', target === 'documentanalysis'); document.body.classList.toggle('cross-screen-wide', target === 'cross'); document.body.classList.toggle('direct-screen-wide', target === 'mattdirect' || target === 'direct'); for(const k of Object.keys(views)){ const on = k === target; const tabEl = $(views[k].tab); const viewEl = $(views[k].view); if(tabEl) tabEl.classList.toggle('active', on); if(viewEl) viewEl.style.display = on ? 'block' : 'none'; } $('viewOutlineIndex') && ( $('viewOutlineIndex').style.display = target === 'outlineindex' ? 'block' : 'none'); $('viewStructuredOutline') && ( $('viewStructuredOutline').style.display = target === 'structuredoutline' ? 'block' : 'none'); updateViewLinks(target); if(typeof updateTrialIssuesTocVisibility === 'function') updateTrialIssuesTocVisibility(); if(opts.pushState !== false){ const params = new URLSearchParams(window.location.search); const caseId = getCaseId(); if(caseId) params.set('case', caseId); else params.delete('case'); params.set('view', target); if(target === 'documenttable' && ui.documentWorksheetOpen) params.set('worksheet', '1'); else if(target === 'elements' && ui.elementsWorksheetOpen) params.set('worksheet', '1'); else params.delete('worksheet'); history.replaceState(null, '', '?' + params.toString()); } if(target==='documents') renderDocuments(); if(target==='documenttable') renderDocumentTable(); if(target==='documentanalysis'){ ui.documentAnalysisFilterPanelOpen = false; ui.documentAnalysisVisibleCount = ui.documentAnalysisVisibleCount || 20; scheduleDocumentAnalysisRender ? scheduleDocumentAnalysisRender() : renderDocumentAnalysis(); } if(target==='exhibits') renderExhibits(); if(target==='elements') renderElements(); if(target==='timeline') renderTimeline(); if(target==='trialissues') renderTrialIssues(); if(target==='reports') renderReports(); if(target==='cross') renderCross(); if(target==='mattdirect' || target==='direct') renderDirect(); if(target==='trialissuesexhibits') renderTrialIssuesExhibits(); if(target==='tagindex') renderDocumentTagIndex(); if(target==='outlineindex') renderOutlineIndex(); if(target==='structuredoutline') renderStructuredOutline(); }
-    $('tabOutline')?.addEventListener('click', (e)=>{ e.preventDefault(); setTab('outline'); }); $('tabDocuments')?.addEventListener('click', (e)=>{ e.preventDefault(); setTab('documents'); }); $('tabTrialIssuesExhibits')?.addEventListener('click', (e)=>{ e.preventDefault(); setTab('trialissuesexhibits'); }); $('tabDocumentAnalysis')?.addEventListener('click', (e)=>{ e.preventDefault(); setTab('documentanalysis'); }); $('tabTagIndex')?.addEventListener('click', (e)=>{ e.preventDefault(); setTab('tagindex'); }); $('tabOutlineIndex')?.addEventListener('click', (e)=>{ e.preventDefault(); setTab('outlineindex'); }); $('tabStructuredOutline')?.addEventListener('click', (e)=>{ e.preventDefault(); setTab('structuredoutline'); }); $('tabExhibits')?.addEventListener('click', (e)=>{ e.preventDefault(); setTab('exhibits'); }); $('tabPeople')?.addEventListener('click', (e)=>{ e.preventDefault(); setTab('people'); }); $('tabElements')?.addEventListener('click', (e)=>{ e.preventDefault(); ui.elementsWorksheetOpen = false; setTab('elements'); }); $('tabTimeline')?.addEventListener('click', (e)=>{ e.preventDefault(); setTab('timeline'); }); $('tabTrialIssues')?.addEventListener('click', (e)=>{ e.preventDefault(); setTab('trialissues'); }); $('tabReports')?.addEventListener('click', (e)=>{ e.preventDefault(); setTab('reports'); }); $('tabCross')?.addEventListener('click', (e)=>{ e.preventDefault(); setTab('cross'); }); $('tabMattDirect')?.addEventListener('click', (e)=>{ e.preventDefault(); setTab('mattdirect'); }); $('tabSettings')?.addEventListener('click', (e)=>{ e.preventDefault(); setTab('settings'); }); $('timelineAddTagBtn')?.addEventListener('click', ()=> setTab('settings')); $('timelineInlineAddTagBtn')?.addEventListener('click', ()=> setTab('settings')); document.querySelectorAll('[data-report-type]').forEach(btn => btn.addEventListener('click', ()=> setReportType(btn.getAttribute('data-report-type')))); $('reportsPrintBtn')?.addEventListener('click', ()=> printCurrentReportToPdf()); document.addEventListener('keydown', (e)=>{ if(ui.currentView === 'reports' && (e.ctrlKey || e.metaKey) && String(e.key || '').toLowerCase() === 'p'){ e.preventDefault(); printCurrentReportToPdf(); } }); document.addEventListener('click', (e)=>{ if(!e.target.closest('.documentAnalysisControlsWrap')){ if(ui.documentAnalysisOpenControlsId){ ui.documentAnalysisOpenControlsId = ''; if(ui.currentView === 'documentanalysis') scheduleDocumentAnalysisRender ? scheduleDocumentAnalysisRender({ skipFilters:true }) : renderDocumentAnalysis({ skipFilters:true }); } } });
+    function setTab(which, opts={}){ if(which === 'direct') which = 'mattdirect'; let target = views[which] ? which : 'outline'; if(target === 'mattdirect'){ try{ localStorage.setItem(getDirectPartyStorageKey(), 'matt'); }catch(e){} } if(!canCurrentUserAccessView(target)){ target = firstAllowedView(); } ui.currentView = target; document.body.classList.toggle('tagindex-active', target === 'tagindex'); document.body.classList.toggle('outlineindex-active', target === 'outlineindex'); document.body.classList.toggle('outline-screen-wide', target === 'outline'); document.body.classList.toggle('documenttable-screen-wide', target === 'documenttable' && !!ui.documentWorksheetOpen); document.body.classList.toggle('documentanalysis-screen-wide', target === 'documentanalysis'); document.body.classList.toggle('cross-screen-wide', target === 'cross'); document.body.classList.toggle('direct-screen-wide', target === 'mattdirect' || target === 'direct'); document.body.classList.toggle('discovery-screen-wide', target === 'discovery'); for(const k of Object.keys(views)){ const on = k === target; const tabEl = $(views[k].tab); const viewEl = $(views[k].view); if(tabEl) tabEl.classList.toggle('active', on); if(viewEl) viewEl.style.display = on ? 'block' : 'none'; } $('viewOutlineIndex') && ( $('viewOutlineIndex').style.display = target === 'outlineindex' ? 'block' : 'none'); $('viewStructuredOutline') && ( $('viewStructuredOutline').style.display = target === 'structuredoutline' ? 'block' : 'none'); updateViewLinks(target); if(typeof updateTrialIssuesTocVisibility === 'function') updateTrialIssuesTocVisibility(); if(opts.pushState !== false){ const params = new URLSearchParams(window.location.search); const caseId = getCaseId(); if(caseId) params.set('case', caseId); else params.delete('case'); params.set('view', target); if(target === 'documenttable' && ui.documentWorksheetOpen) params.set('worksheet', '1'); else if(target === 'elements' && ui.elementsWorksheetOpen) params.set('worksheet', '1'); else params.delete('worksheet'); history.replaceState(null, '', '?' + params.toString()); } if(target==='documents') renderDocuments(); if(target==='documenttable') renderDocumentTable(); if(target==='documentanalysis'){ ui.documentAnalysisFilterPanelOpen = false; ui.documentAnalysisVisibleCount = ui.documentAnalysisVisibleCount || 20; scheduleDocumentAnalysisRender ? scheduleDocumentAnalysisRender() : renderDocumentAnalysis(); } if(target==='exhibits') renderExhibits(); if(target==='elements') renderElements(); if(target==='timeline') renderTimeline(); if(target==='trialissues') renderTrialIssues(); if(target==='reports') renderReports(); if(target==='cross') renderCross(); if(target==='mattdirect' || target==='direct') renderDirect(); if(target==='trialissuesexhibits') renderTrialIssuesExhibits(); if(target==='discovery') renderDiscovery(); if(target==='tagindex') renderDocumentTagIndex(); if(target==='outlineindex') renderOutlineIndex(); if(target==='structuredoutline') renderStructuredOutline(); }
+    $('tabOutline')?.addEventListener('click', (e)=>{ e.preventDefault(); setTab('outline'); }); $('tabDocuments')?.addEventListener('click', (e)=>{ e.preventDefault(); setTab('documents'); }); $('tabTrialIssuesExhibits')?.addEventListener('click', (e)=>{ e.preventDefault(); setTab('trialissuesexhibits'); }); $('tabDocumentAnalysis')?.addEventListener('click', (e)=>{ e.preventDefault(); setTab('documentanalysis'); }); $('tabDiscovery')?.addEventListener('click', (e)=>{ e.preventDefault(); setTab('discovery'); }); $('tabTagIndex')?.addEventListener('click', (e)=>{ e.preventDefault(); setTab('tagindex'); }); $('tabOutlineIndex')?.addEventListener('click', (e)=>{ e.preventDefault(); setTab('outlineindex'); }); $('tabStructuredOutline')?.addEventListener('click', (e)=>{ e.preventDefault(); setTab('structuredoutline'); }); $('tabExhibits')?.addEventListener('click', (e)=>{ e.preventDefault(); setTab('exhibits'); }); $('tabPeople')?.addEventListener('click', (e)=>{ e.preventDefault(); setTab('people'); }); $('tabElements')?.addEventListener('click', (e)=>{ e.preventDefault(); ui.elementsWorksheetOpen = false; setTab('elements'); }); $('tabTimeline')?.addEventListener('click', (e)=>{ e.preventDefault(); setTab('timeline'); }); $('tabTrialIssues')?.addEventListener('click', (e)=>{ e.preventDefault(); setTab('trialissues'); }); $('tabReports')?.addEventListener('click', (e)=>{ e.preventDefault(); setTab('reports'); }); $('tabCross')?.addEventListener('click', (e)=>{ e.preventDefault(); setTab('cross'); }); $('tabMattDirect')?.addEventListener('click', (e)=>{ e.preventDefault(); setTab('mattdirect'); }); $('tabSettings')?.addEventListener('click', (e)=>{ e.preventDefault(); setTab('settings'); }); $('timelineAddTagBtn')?.addEventListener('click', ()=> setTab('settings')); $('timelineInlineAddTagBtn')?.addEventListener('click', ()=> setTab('settings')); document.querySelectorAll('[data-report-type]').forEach(btn => btn.addEventListener('click', ()=> setReportType(btn.getAttribute('data-report-type')))); $('reportsPrintBtn')?.addEventListener('click', ()=> printCurrentReportToPdf()); document.addEventListener('keydown', (e)=>{ if(ui.currentView === 'reports' && (e.ctrlKey || e.metaKey) && String(e.key || '').toLowerCase() === 'p'){ e.preventDefault(); printCurrentReportToPdf(); } }); document.addEventListener('click', (e)=>{ if(!e.target.closest('.documentAnalysisControlsWrap')){ if(ui.documentAnalysisOpenControlsId){ ui.documentAnalysisOpenControlsId = ''; if(ui.currentView === 'documentanalysis') scheduleDocumentAnalysisRender ? scheduleDocumentAnalysisRender({ skipFilters:true }) : renderDocumentAnalysis({ skipFilters:true }); } } });
     document.addEventListener('click', (e)=>{ const link = e.target.closest('[data-view-link="documenttable"]'); if(!link) return; e.preventDefault(); setTab('documenttable'); });
     function escapeHtml(str){ return String(str == null ? '' : str).replace(/[&<>\"']/g, (c)=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c])); }
     function sortByName(a,b){ return (a.name||'').localeCompare(b.name||''); }
@@ -11459,6 +11529,323 @@ const endpoint = `${SUPABASE_URL}/functions/v1/finalize-exhibit-packet`;
   $('directSyncSupabaseBtn')?.addEventListener('click', async (e)=>{ e.preventDefault(); e.stopImmediatePropagation(); await saveDirectOutlineToSupabase(); }, true);
   $('directLoadSupabaseBtn')?.addEventListener('click', async (e)=>{ e.preventDefault(); e.stopImmediatePropagation(); await loadDirectOutlineFromSupabase(); }, true);
   $('directBackupBtn')?.addEventListener('click', (e)=>{ e.preventDefault(); e.stopImmediatePropagation(); downloadDirectBackup(); }, true);
+
+
+
+
+  /* Discovery request extraction and client response portal. */
+  const DISCOVERY_STORAGE_KEY = () => `murski_discovery_${getCaseId() || 'global'}_v1`;
+  const DISCOVERY_TYPE_LABELS = {
+    interrogatories: 'Interrogatories',
+    disclosures: 'Request for Disclosure',
+    production: 'Request for Production',
+    admissions: 'Request for Admissions'
+  };
+  const DISCOVERY_RFP_OPTIONS = [
+    'Will produce responsive documents',
+    'No responsive documents in my possession',
+    'I am not sure / need attorney help',
+    'Documents already produced or uploaded'
+  ];
+  let discoveryState = { sets: [], requests: [], responses: [], files: [], selectedSetId: '', mode: 'attorney', loaded: false, supabaseOk: true };
+
+  function normalizeDiscoveryType(type){
+    const value = String(type || '').toLowerCase();
+    if(value.includes('production')) return 'production';
+    if(value.includes('admission')) return 'admissions';
+    if(value.includes('disclosure')) return 'disclosures';
+    return 'interrogatories';
+  }
+  function getDiscoveryLabel(type){ return DISCOVERY_TYPE_LABELS[normalizeDiscoveryType(type)] || 'Discovery'; }
+  function setDiscoveryStatus(text){ const el = $('discoveryExtractStatus'); if(el) el.textContent = text || ''; }
+  function saveDiscoveryLocal(){
+    try{ localStorage.setItem(DISCOVERY_STORAGE_KEY(), JSON.stringify(discoveryState)); }catch(e){ console.warn('Could not save discovery locally', e); }
+  }
+  function loadDiscoveryLocal(){
+    try{
+      const parsed = JSON.parse(localStorage.getItem(DISCOVERY_STORAGE_KEY()) || '{}');
+      if(parsed && typeof parsed === 'object') discoveryState = { ...discoveryState, ...parsed, loaded:true };
+    }catch(e){ console.warn('Could not load local discovery', e); }
+  }
+  function getSelectedDiscoverySet(){ return discoveryState.sets.find(s => s.id === discoveryState.selectedSetId) || discoveryState.sets[0] || null; }
+  function selectDiscoverySet(setId, mode){
+    discoveryState.selectedSetId = setId || '';
+    if(mode) discoveryState.mode = mode;
+    saveDiscoveryLocal();
+    renderDiscovery();
+  }
+  function discoveryRequestsForSet(setId, includeHidden=true){
+    return (discoveryState.requests || []).filter(r => r.discovery_set_id === setId).filter(r => includeHidden || r.send_to_client !== false).sort((a,b)=>(Number(a.sort_order)||0)-(Number(b.sort_order)||0));
+  }
+  function getDiscoveryResponse(requestId){
+    let resp = (discoveryState.responses || []).find(r => r.request_id === requestId);
+    if(!resp){ resp = { id: uid(), case_id:getCaseId(), request_id: requestId, client_response:'', client_comments:'', rfp_status:'', updated_at:new Date().toISOString() }; discoveryState.responses.push(resp); }
+    return resp;
+  }
+  function discoveryFilesForRequest(requestId){ return (discoveryState.files || []).filter(f => f.request_id === requestId); }
+
+  async function loadDiscoveryData(){
+    if(!window.supabase || !getCaseId()){ loadDiscoveryLocal(); return; }
+    try{
+      const [{data:sets,error:setsErr},{data:reqs,error:reqErr},{data:resps,error:respErr},{data:files,error:fileErr}] = await Promise.all([
+        supabase.from('discovery_sets').select('*').eq('case_id', getCaseId()).order('created_at', { ascending:false }),
+        supabase.from('discovery_requests').select('*').eq('case_id', getCaseId()).order('sort_order', { ascending:true }),
+        supabase.from('discovery_responses').select('*').eq('case_id', getCaseId()),
+        supabase.from('discovery_files').select('*').eq('case_id', getCaseId()).order('created_at', { ascending:true })
+      ]);
+      const err = setsErr || reqErr || respErr || fileErr;
+      if(err) throw err;
+      discoveryState.sets = Array.isArray(sets) ? sets : [];
+      discoveryState.requests = Array.isArray(reqs) ? reqs : [];
+      discoveryState.responses = Array.isArray(resps) ? resps : [];
+      discoveryState.files = Array.isArray(files) ? files : [];
+      discoveryState.loaded = true; discoveryState.supabaseOk = true;
+      if(!discoveryState.selectedSetId && discoveryState.sets[0]) discoveryState.selectedSetId = discoveryState.sets[0].id;
+      saveDiscoveryLocal();
+    }catch(error){
+      console.warn('Discovery Supabase tables not ready; using local cache.', error);
+      discoveryState.supabaseOk = false;
+      loadDiscoveryLocal();
+      const warn = $('discoverySetupWarning');
+      if(warn){ warn.classList.remove('hidden'); warn.innerHTML = 'Discovery Supabase tables are not available yet, so this page is using local browser storage for testing. Add the tables listed below, then refresh.'; }
+    }
+  }
+
+  async function readDiscoveryFileText(file){
+    if(!file) throw new Error('Choose a file first.');
+    const name = String(file.name || '').toLowerCase();
+    const buffer = await file.arrayBuffer();
+    if(name.endsWith('.pdf') || String(file.type || '').includes('pdf')){
+      const pdfjs = await ensurePdfJsLib();
+      if(!pdfjs || !pdfjs.getDocument) throw new Error('PDF.js is not available.');
+      if(pdfjs.GlobalWorkerOptions){
+        const version = String(pdfjs.version || '');
+        pdfjs.GlobalWorkerOptions.workerSrc = version.startsWith('4.') ? 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.5.136/pdf.worker.min.js' : 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+      }
+      const pdf = await pdfjs.getDocument({ data:new Uint8Array(buffer), disableWorker:true, useWorkerFetch:false, isEvalSupported:false }).promise;
+      const pages = [];
+      for(let i=1;i<=pdf.numPages;i++){
+        const page = await pdf.getPage(i);
+        const content = await page.getTextContent({ normalizeWhitespace:true, disableCombineTextItems:false });
+        pages.push((content.items || []).map(item => item.str || '').join(' '));
+      }
+      return pages.join('\n\n');
+    }
+    if(name.endsWith('.docx') || String(file.type || '').includes('wordprocessingml')){
+      if(!window.mammoth || !window.mammoth.extractRawText) throw new Error('Mammoth DOCX reader is not available.');
+      const result = await window.mammoth.extractRawText({ arrayBuffer:buffer });
+      return result.value || '';
+    }
+    return new TextDecoder('utf-8').decode(buffer);
+  }
+
+  async function uploadDiscoverySourceFile(setId, file){
+    if(!file || !window.supabase) return '';
+    const safeName = sanitizeFileName(file.name || 'discovery');
+    const path = `${getCaseId()}/discovery/source/${setId}/${Date.now()}_${safeName}`;
+    const { error } = await supabase.storage.from(DOCUMENT_BUCKET).upload(path, file, { upsert:true, contentType:file.type || undefined });
+    if(error){ console.warn('Discovery source file upload failed', error); return ''; }
+    return path;
+  }
+
+  function localExtractDiscoveryRequests(rawText, type){
+    const clean = String(rawText || '').replace(/\r/g, '').replace(/[ \t]+/g, ' ').trim();
+    const matches = [];
+    const re = /(?:^|\n)\s*(?:request\s*(?:for\s*(?:production|admission|disclosure))?|interrogatory)?\s*(?:no\.?|number|#)?\s*(\d{1,3})\s*[\).:-]\s*/gi;
+    let m;
+    while((m = re.exec(clean))){ matches.push({ index:m.index, number:m[1], end:re.lastIndex }); }
+    const requests = [];
+    for(let i=0;i<matches.length;i++){
+      const start = matches[i].end;
+      const end = i + 1 < matches.length ? matches[i+1].index : clean.length;
+      const text = clean.slice(start, end).trim();
+      if(text.length < 12) continue;
+      requests.push({ request_number: matches[i].number, request_text:text, request_type: normalizeDiscoveryType(type), send_to_client:true, confidence:.55 });
+    }
+    if(requests.length) return requests;
+    return clean.split(/\n{2,}/).map((x,i)=>x.trim()).filter(x=>x.length>20).slice(0,80).map((text,i)=>({ request_number:String(i+1), request_text:text, request_type:normalizeDiscoveryType(type), send_to_client:true, confidence:.35 }));
+  }
+
+  async function callDiscoveryExtractionApi(rawText, type, fileName){
+    const endpoint = `${SUPABASE_URL}/functions/v1/extract-discovery`;
+    try{
+      let token = '';
+      try{ const { data } = await supabase.auth.getSession(); token = data?.session?.access_token || ''; }catch(e){}
+      const response = await fetch(endpoint, {
+        method:'POST',
+        headers:{ 'Content-Type':'application/json', 'apikey': SUPABASE_KEY, ...(token ? { Authorization:`Bearer ${token}` } : {}) },
+        body: JSON.stringify({ case_id:getCaseId(), file_name:fileName || '', discovery_type:normalizeDiscoveryType(type), raw_text:String(rawText || '').slice(0, 180000) })
+      });
+      const raw = await response.text();
+      let data = {}; try{ data = raw ? JSON.parse(raw) : {}; }catch(e){ data = {}; }
+      if(!response.ok) throw new Error((data && (data.error || data.message)) || ('Extraction endpoint status ' + response.status));
+      const list = Array.isArray(data.requests) ? data.requests : (Array.isArray(data.items) ? data.items : []);
+      if(!list.length) throw new Error('Extraction endpoint did not return requests.');
+      return list.map((item,i)=>({
+        request_number: String(item.request_number || item.number || i + 1),
+        request_text: String(item.request_text || item.text || item.request || '').trim(),
+        request_type: normalizeDiscoveryType(item.request_type || type),
+        send_to_client: item.send_to_client !== false,
+        confidence: Number(item.confidence || 0) || null
+      })).filter(item => item.request_text);
+    }catch(error){
+      console.warn('Discovery AI extraction unavailable; using local fallback.', error);
+      return localExtractDiscoveryRequests(rawText, type);
+    }
+  }
+
+  async function saveDiscoverySetAndRequests(setPayload, requestPayloads, file){
+    const localSet = { id: uid(), case_id:getCaseId(), created_at:new Date().toISOString(), ...setPayload };
+    const sourcePath = await uploadDiscoverySourceFile(localSet.id, file);
+    localSet.source_file_path = sourcePath;
+    localSet.source_file_name = file?.name || '';
+    try{
+      if(window.supabase){
+        const { data:setRow, error:setError } = await supabase.from('discovery_sets').insert(localSet).select().single();
+        if(setError) throw setError;
+        const rows = requestPayloads.map((r,i)=>({ id: uid(), case_id:getCaseId(), discovery_set_id:setRow.id, request_type:normalizeDiscoveryType(r.request_type || setRow.discovery_type), request_number:String(r.request_number || i + 1), request_text:String(r.request_text || '').trim(), send_to_client:r.send_to_client !== false, sort_order:i+1, attorney_notes:'', confidence:r.confidence || null }));
+        const { data:reqRows, error:reqError } = await supabase.from('discovery_requests').insert(rows).select();
+        if(reqError) throw reqError;
+        discoveryState.sets.unshift(setRow);
+        discoveryState.requests = discoveryState.requests.concat(reqRows || rows);
+        discoveryState.selectedSetId = setRow.id;
+        discoveryState.supabaseOk = true;
+        saveDiscoveryLocal();
+        return setRow;
+      }
+    }catch(error){
+      console.warn('Could not save discovery to Supabase, saving locally.', error);
+      discoveryState.supabaseOk = false;
+      localSet.source_file_path = sourcePath;
+      discoveryState.sets.unshift(localSet);
+      discoveryState.requests = discoveryState.requests.concat(requestPayloads.map((r,i)=>({ id: uid(), case_id:getCaseId(), discovery_set_id:localSet.id, request_type:normalizeDiscoveryType(r.request_type || localSet.discovery_type), request_number:String(r.request_number || i + 1), request_text:String(r.request_text || '').trim(), send_to_client:r.send_to_client !== false, sort_order:i+1, attorney_notes:'', confidence:r.confidence || null })));
+      discoveryState.selectedSetId = localSet.id;
+      saveDiscoveryLocal();
+      return localSet;
+    }
+  }
+
+  async function updateDiscoveryRequest(requestId, patch){
+    const req = discoveryState.requests.find(r => r.id === requestId); if(!req) return;
+    Object.assign(req, patch);
+    saveDiscoveryLocal();
+    if(window.supabase && discoveryState.supabaseOk){ const { error } = await supabase.from('discovery_requests').update(patch).eq('id', requestId); if(error) console.warn('Discovery request update failed', error); }
+    renderDiscovery();
+  }
+  async function updateDiscoveryResponse(requestId, patch){
+    const resp = getDiscoveryResponse(requestId);
+    Object.assign(resp, patch, { updated_at:new Date().toISOString(), case_id:getCaseId(), request_id:requestId });
+    saveDiscoveryLocal();
+    if(window.supabase && discoveryState.supabaseOk){
+      const { error } = await supabase.from('discovery_responses').upsert(resp, { onConflict:'request_id' });
+      if(error) console.warn('Discovery response save failed', error);
+    }
+  }
+  async function uploadDiscoveryResponseFile(requestId, file){
+    if(!file) return;
+    const safeName = sanitizeFileName(file.name || 'file');
+    const local = { id:uid(), case_id:getCaseId(), request_id:requestId, file_name:file.name || safeName, file_type:file.type || '', file_size:file.size || 0, file_path:'', created_at:new Date().toISOString() };
+    try{
+      const path = `${getCaseId()}/discovery/responses/${requestId}/${Date.now()}_${safeName}`;
+      if(window.supabase){
+        const { error:upErr } = await supabase.storage.from(DOCUMENT_BUCKET).upload(path, file, { upsert:true, contentType:file.type || undefined });
+        if(upErr) throw upErr;
+        local.file_path = path;
+        const { data, error } = await supabase.from('discovery_files').insert(local).select().single();
+        if(error) throw error;
+        discoveryState.files.push(data);
+      } else discoveryState.files.push(local);
+    }catch(error){ console.warn('Discovery file upload failed; recorded locally only.', error); discoveryState.files.push(local); }
+    saveDiscoveryLocal(); renderDiscovery();
+  }
+
+  function renderDiscoveryDashboard(){
+    const host = $('discoveryDashboardHost'); if(!host) return;
+    const sets = discoveryState.sets || [];
+    if(!sets.length){ host.innerHTML = '<div class="empty">No discovery sets yet. Use the upload panel below to add one.</div>'; return; }
+    const types = ['disclosures','production','interrogatories','admissions'];
+    host.innerHTML = '<div style="overflow:auto"><table class="discoverySummaryTable"><thead><tr><th>Date Received</th><th>Client Response Due</th><th>Request for Disclosures</th><th>Request for Production</th><th>Interrogatories</th><th>Request for Admissions</th></tr></thead><tbody>' + sets.map(set => {
+      const selected = set.id === discoveryState.selectedSetId;
+      const cells = types.map(t => normalizeDiscoveryType(set.discovery_type) === t ? `<td class="center"><button type="button" class="discoveryClickable" data-discovery-open-set="${escapeHtml(set.id)}" data-discovery-open-mode="client" title="${escapeHtml(set.title || '')}">x</button></td>` : '<td></td>').join('');
+      return `<tr style="${selected ? 'background:#f8fbff' : ''}"><td>${escapeHtml(formatDateForDisplay(set.date_received || '') || set.date_received || '')}</td><td>${escapeHtml(formatDateForDisplay(set.client_due_date || '') || set.client_due_date || '')}</td>${cells}</tr>`;
+    }).join('') + '</tbody></table></div>';
+    host.querySelectorAll('[data-discovery-open-set]').forEach(btn => btn.addEventListener('click', ()=> selectDiscoverySet(btn.getAttribute('data-discovery-open-set'), btn.getAttribute('data-discovery-open-mode') || 'client')));
+  }
+
+  function renderDiscoveryAttorneyList(){
+    const host = $('discoveryAttorneyList'); if(!host) return;
+    const set = getSelectedDiscoverySet();
+    $('discoverySelectedSetPill') && ($('discoverySelectedSetPill').textContent = set ? `${getDiscoveryLabel(set.discovery_type)}: ${set.title || 'Untitled'}` : 'No set selected');
+    if(!set){ host.innerHTML = '<div class="empty">Upload or select a discovery set first.</div>'; return; }
+    const reqs = discoveryRequestsForSet(set.id, true);
+    host.innerHTML = reqs.length ? reqs.map(req => `<div class="discoveryRequestRow ${req.send_to_client === false ? 'hiddenFromClient' : ''}"><div class="discoveryRequestTop"><label class="checkItem" style="margin:0"><input type="checkbox" data-discovery-send-toggle="${escapeHtml(req.id)}" ${req.send_to_client !== false ? 'checked' : ''}/> <span>Send to client</span></label><span class="discoveryStatusPill">${escapeHtml(getDiscoveryLabel(req.request_type))} ${escapeHtml(req.request_number || '')}</span></div><div class="label">Request text</div><textarea data-discovery-request-text="${escapeHtml(req.id)}">${escapeHtml(req.request_text || '')}</textarea><div class="label">Attorney notes / why hidden / drafting notes</div><textarea data-discovery-attorney-notes="${escapeHtml(req.id)}" placeholder="Private attorney notes">${escapeHtml(req.attorney_notes || '')}</textarea></div>`).join('') : '<div class="empty">No requests were extracted.</div>';
+    host.querySelectorAll('[data-discovery-send-toggle]').forEach(input => input.addEventListener('change', e => updateDiscoveryRequest(input.getAttribute('data-discovery-send-toggle'), { send_to_client: !!e.target.checked })));
+    host.querySelectorAll('[data-discovery-request-text]').forEach(input => input.addEventListener('blur', () => updateDiscoveryRequest(input.getAttribute('data-discovery-request-text'), { request_text: input.value || '' })));
+    host.querySelectorAll('[data-discovery-attorney-notes]').forEach(input => input.addEventListener('blur', () => updateDiscoveryRequest(input.getAttribute('data-discovery-attorney-notes'), { attorney_notes: input.value || '' })));
+  }
+
+  function renderDiscoveryClientList(){
+    const host = $('discoveryClientList'); if(!host) return;
+    const set = getSelectedDiscoverySet();
+    $('discoveryClientSelectedPill') && ($('discoveryClientSelectedPill').textContent = set ? `${getDiscoveryLabel(set.discovery_type)}: ${set.title || 'Untitled'}` : 'No set selected');
+    if(!set){ host.innerHTML = '<div class="empty">No discovery set selected.</div>'; return; }
+    const reqs = discoveryRequestsForSet(set.id, false);
+    host.innerHTML = reqs.length ? reqs.map(req => {
+      const resp = getDiscoveryResponse(req.id);
+      const isRfp = normalizeDiscoveryType(req.request_type) === 'production';
+      const files = discoveryFilesForRequest(req.id);
+      return `<div class="discoveryRequestRow"><div class="discoveryRequestTop"><div class="discoveryReqNumber">${escapeHtml(getDiscoveryLabel(req.request_type))} ${escapeHtml(req.request_number || '')}</div><span class="hint">Files: ${files.length}</span></div><div class="discoveryReqText">${escapeHtml(req.request_text || '')}</div>${isRfp ? `<div><div class="label">Response</div><select data-discovery-rfp-status="${escapeHtml(req.id)}"><option value="">Choose response...</option>${DISCOVERY_RFP_OPTIONS.map(opt => `<option value="${escapeHtml(opt)}" ${resp.rfp_status === opt ? 'selected' : ''}>${escapeHtml(opt)}</option>`).join('')}</select></div>` : `<div><div class="label">Your answer</div><textarea data-discovery-client-response="${escapeHtml(req.id)}" placeholder="Type your answer here">${escapeHtml(resp.client_response || '')}</textarea></div>`}<div><div class="label">Questions / comments to your attorney</div><textarea data-discovery-client-comments="${escapeHtml(req.id)}" placeholder="Ask your attorney a question or explain anything you are unsure about">${escapeHtml(resp.client_comments || '')}</textarea></div><div><div class="label">Upload files for this request</div><input type="file" multiple data-discovery-file-input="${escapeHtml(req.id)}" /></div><div class="discoveryFileList">${files.length ? files.map(f => `<div class="discoveryFilePill"><span>${escapeHtml(f.file_name || 'File')}</span>${f.file_path ? `<a target="_blank" rel="noopener" href="${escapeHtml(getDocumentPublicUrl(f.file_path))}">Open</a>` : '<span class="hint">local only</span>'}</div>`).join('') : '<div class="hint">No files uploaded for this request yet.</div>'}</div></div>`;
+    }).join('') : '<div class="empty">There are no requests currently assigned to the client.</div>';
+    host.querySelectorAll('[data-discovery-client-response]').forEach(el => el.addEventListener('blur', () => updateDiscoveryResponse(el.getAttribute('data-discovery-client-response'), { client_response:el.value || '' })));
+    host.querySelectorAll('[data-discovery-client-comments]').forEach(el => el.addEventListener('blur', () => updateDiscoveryResponse(el.getAttribute('data-discovery-client-comments'), { client_comments:el.value || '' })));
+    host.querySelectorAll('[data-discovery-rfp-status]').forEach(el => el.addEventListener('change', () => updateDiscoveryResponse(el.getAttribute('data-discovery-rfp-status'), { rfp_status:el.value || '' })));
+    host.querySelectorAll('[data-discovery-file-input]').forEach(input => input.addEventListener('change', async () => { const requestId = input.getAttribute('data-discovery-file-input'); for(const file of Array.from(input.files || [])) await uploadDiscoveryResponseFile(requestId, file); input.value=''; }));
+  }
+
+  async function renderDiscovery(){
+    if(!discoveryState.loaded) await loadDiscoveryData();
+    const attorneyAllowed = typeof canCurrentUserUseAdminOnlyTools === 'function' ? canCurrentUserUseAdminOnlyTools() : true;
+    if(!attorneyAllowed) discoveryState.mode = 'client';
+    const attorneyPane = $('discoveryAttorneyPane'); const clientPane = $('discoveryClientPane');
+    if(attorneyPane) attorneyPane.style.display = discoveryState.mode === 'attorney' && attorneyAllowed ? 'grid' : 'none';
+    if(clientPane) clientPane.style.display = discoveryState.mode === 'client' || !attorneyAllowed ? 'grid' : 'none';
+    if($('discoveryAttorneyModeBtn')){ $('discoveryAttorneyModeBtn').style.display = attorneyAllowed ? '' : 'none'; $('discoveryAttorneyModeBtn').className = discoveryState.mode === 'attorney' ? 'btnPrimary' : 'btnGhost'; }
+    if($('discoveryClientModeBtn')) $('discoveryClientModeBtn').className = discoveryState.mode === 'client' || !attorneyAllowed ? 'btnPrimary' : 'btnGhost';
+    renderDiscoveryDashboard(); renderDiscoveryAttorneyList(); renderDiscoveryClientList();
+  }
+  window.renderDiscovery = renderDiscovery;
+
+  async function handleDiscoveryExtract(){
+    const file = $('discoveryUploadFile')?.files?.[0];
+    const type = normalizeDiscoveryType($('discoveryUploadType')?.value || 'interrogatories');
+    const title = String($('discoveryTitle')?.value || '').trim() || (file ? file.name : getDiscoveryLabel(type));
+    if(!file){ alert('Choose a PDF, DOCX, or TXT file first.'); return; }
+    setDiscoveryStatus('Extracting text from file...');
+    try{
+      const rawText = await readDiscoveryFileText(file);
+      if(!rawText.trim()) throw new Error('No text could be extracted from this file. If it is a scanned PDF, run OCR first or add OCR to the Edge Function.');
+      setDiscoveryStatus('Sending text to discovery extraction API...');
+      const requests = await callDiscoveryExtractionApi(rawText, type, file.name);
+      const set = await saveDiscoverySetAndRequests({ title, discovery_type:type, date_received:$('discoveryDateReceived')?.value || null, client_due_date:$('discoveryClientDue')?.value || null, extraction_status:'review' }, requests, file);
+      setDiscoveryStatus(`Extracted ${requests.length} request(s). Review them before sending to the client.`);
+      discoveryState.mode = 'attorney'; discoveryState.selectedSetId = set.id; discoveryState.loaded = true; saveDiscoveryLocal(); renderDiscovery();
+    }catch(error){ console.error('Discovery extraction failed', error); setDiscoveryStatus('Extraction failed: ' + (error?.message || error)); alert('Extraction failed: ' + (error?.message || error)); }
+  }
+
+  function downloadDiscoveryWord(){
+    const set = getSelectedDiscoverySet(); if(!set){ alert('Select a discovery set first.'); return; }
+    const reqs = discoveryRequestsForSet(set.id, true);
+    const rows = reqs.map(req => { const resp = getDiscoveryResponse(req.id); const files = discoveryFilesForRequest(req.id); const answer = normalizeDiscoveryType(req.request_type) === 'production' ? (resp.rfp_status || '') : (resp.client_response || ''); return `<h3>${escapeHtml(getDiscoveryLabel(req.request_type))} No. ${escapeHtml(req.request_number || '')}</h3><p><b>Request:</b> ${escapeHtml(req.request_text || '')}</p><p><b>Client response:</b> ${escapeHtml(answer || '')}</p><p><b>Client comments/questions:</b> ${escapeHtml(resp.client_comments || '')}</p><p><b>Files:</b> ${files.map(f => escapeHtml(f.file_name || '')).join(', ') || 'None'}</p><hr>`; }).join('');
+    const html = `<!doctype html><html><head><meta charset="utf-8"><title>${escapeHtml(set.title || 'Discovery Responses')}</title></head><body><h1>${escapeHtml(set.title || 'Discovery Responses')}</h1><p><b>Type:</b> ${escapeHtml(getDiscoveryLabel(set.discovery_type))}</p><p><b>Date received:</b> ${escapeHtml(formatDateForDisplay(set.date_received || '') || '')}</p><p><b>Client due:</b> ${escapeHtml(formatDateForDisplay(set.client_due_date || '') || '')}</p>${rows}</body></html>`;
+    const blob = new Blob([html], { type:'application/msword' });
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `${(set.title || 'discovery-responses').replace(/[^a-z0-9]+/gi,'_')}.doc`; document.body.appendChild(a); a.click(); setTimeout(()=>{ URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+  }
+
+  $('discoveryAttorneyModeBtn')?.addEventListener('click', ()=>{ discoveryState.mode='attorney'; saveDiscoveryLocal(); renderDiscovery(); });
+  $('discoveryClientModeBtn')?.addEventListener('click', ()=>{ discoveryState.mode='client'; saveDiscoveryLocal(); renderDiscovery(); });
+  $('discoveryRefreshBtn')?.addEventListener('click', async ()=>{ discoveryState.loaded=false; await loadDiscoveryData(); renderDiscovery(); });
+  $('discoveryExportWordBtn')?.addEventListener('click', downloadDiscoveryWord);
+  $('discoveryExtractBtn')?.addEventListener('click', handleDiscoveryExtract);
 
 
   initializeCaseChatUi();
