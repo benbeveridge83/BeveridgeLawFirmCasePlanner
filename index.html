@@ -7,6 +7,8 @@
 
     const SUPABASE_URL = "https://ewemahyfoegkpzgpqnsr.supabase.co"
     const SUPABASE_KEY = "sb_publishable_0ddiJfYLmhk9maLNcYJakg_aUMkvWRO"
+    window.SUPABASE_URL = SUPABASE_URL
+    window.SUPABASE_KEY = SUPABASE_KEY
 const supabase = createClient(SUPABASE_URL, SUPABASE_KEY, {
   auth: {
     persistSession: true,
@@ -53,6 +55,7 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_KEY, {
       if (event === 'PASSWORD_RECOVERY') window.__pendingPasswordRecovery = true;
     });
     const DOCUMENT_BUCKET = "case-documents"
+    window.DOCUMENT_BUCKET = DOCUMENT_BUCKET
     window.addEventListener('unhandledrejection', (event) => {
       const msg = String(event?.reason?.message || event?.reason || '');
       if (msg.includes('message channel closed before a response was received')) event.preventDefault();
@@ -11643,7 +11646,7 @@ const endpoint = `${SUPABASE_URL}/functions/v1/finalize-exhibit-packet`;
     if(!file || !window.supabase) return '';
     const safeName = sanitizeFileName(file.name || 'discovery');
     const path = `${getCaseId()}/discovery/source/${setId}/${Date.now()}_${safeName}`;
-    const { error } = await supabase.storage.from(DOCUMENT_BUCKET).upload(path, file, { upsert:true, contentType:file.type || undefined });
+    const { error } = await supabase.storage.from(window.DOCUMENT_BUCKET || 'case-documents').upload(path, file, { upsert:true, contentType:file.type || undefined });
     if(error){ console.warn('Discovery source file upload failed', error); return ''; }
     return path;
   }
@@ -11667,13 +11670,13 @@ const endpoint = `${SUPABASE_URL}/functions/v1/finalize-exhibit-packet`;
   }
 
   async function callDiscoveryExtractionApi(rawText, type, fileName){
-    const endpoint = `${SUPABASE_URL}/functions/v1/extract-discovery`;
+    const endpoint = `${window.SUPABASE_URL || 'https://ewemahyfoegkpzgpqnsr.supabase.co'}/functions/v1/extract-discovery`;
     try{
       let token = '';
       try{ const { data } = await supabase.auth.getSession(); token = data?.session?.access_token || ''; }catch(e){}
       const response = await fetch(endpoint, {
         method:'POST',
-        headers:{ 'Content-Type':'application/json', 'apikey': SUPABASE_KEY, ...(token ? { Authorization:`Bearer ${token}` } : {}) },
+        headers:{ 'Content-Type':'application/json', 'apikey': (window.SUPABASE_KEY || 'sb_publishable_0ddiJfYLmhk9maLNcYJakg_aUMkvWRO'), ...(token ? { Authorization:`Bearer ${token}` } : {}) },
         body: JSON.stringify({ case_id:getCaseId(), file_name:fileName || '', discovery_type:normalizeDiscoveryType(type), raw_text:String(rawText || '').slice(0, 180000) })
       });
       const raw = await response.text();
@@ -11748,7 +11751,7 @@ const endpoint = `${SUPABASE_URL}/functions/v1/finalize-exhibit-packet`;
     try{
       const path = `${getCaseId()}/discovery/responses/${requestId}/${Date.now()}_${safeName}`;
       if(window.supabase){
-        const { error:upErr } = await supabase.storage.from(DOCUMENT_BUCKET).upload(path, file, { upsert:true, contentType:file.type || undefined });
+        const { error:upErr } = await supabase.storage.from(window.DOCUMENT_BUCKET || 'case-documents').upload(path, file, { upsert:true, contentType:file.type || undefined });
         if(upErr) throw upErr;
         local.file_path = path;
         const { data, error } = await supabase.from('discovery_files').insert(local).select().single();
