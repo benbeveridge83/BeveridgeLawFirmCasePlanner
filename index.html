@@ -1699,6 +1699,14 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_KEY, {
     .discoveryProgressOuter{height:14px;border-radius:999px;background:#e5e7eb;overflow:hidden;border:1px solid var(--border);}
     .discoveryProgressInner{height:100%;background:var(--brand);}
     .discoveryNoAnswerNeeded{border-left:5px solid #94a3b8;background:#f8fafc;}
+    .discoveryDocPicker{display:grid;gap:8px;}
+    .discoveryModal{position:fixed;inset:0;background:rgba(15,23,42,.42);display:none;align-items:center;justify-content:center;z-index:160;padding:20px;}
+    .discoveryModal.open{display:flex;}
+    .discoveryModalCard{width:min(760px,calc(100vw - 34px));max-height:calc(100vh - 34px);overflow:auto;background:#fff;border:1px solid var(--border);border-radius:20px;box-shadow:var(--shadow);padding:18px;display:grid;gap:12px;}
+    .discoveryModalActions{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end;align-items:center;}
+    .discoveryDownloadCell{display:flex;gap:8px;align-items:center;justify-content:center;flex-wrap:wrap;}
+    .discoveryDownloadLink{font-size:12px;font-weight:900;color:var(--brand2);text-decoration:underline;text-underline-offset:3px;background:transparent;border:none;box-shadow:none;padding:0;}
+    .discoveryUploadButton{width:max-content;}
     @media (max-width: 1000px){.discoveryGrid{grid-template-columns:1fr}.discoverySummaryTable{min-width:680px}}
 
   </style>
@@ -1768,7 +1776,7 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_KEY, {
       <div class="discoveryTop">
         <div>
           <h2 style="margin-bottom:8px">Discovery</h2>
-          <div class="hint">Upload Interrogatories, Requests for Disclosure, Requests for Production, or Requests for Admission. Review extracted requests before sending them to the client. Clients only see published requests and response boxes.</div>
+          <div class="hint">Upload Interrogatories, Requests for Disclosure, Requests for Production, or Requests for Admission. Review extracted requests before sending them to the client. Clients see every extracted request, but unchecked requests are marked no response required and do not count toward completion.</div>
         </div>
         <div class="discoveryModeBar">
           <button id="discoveryAttorneyModeBtn" type="button" class="btnPrimary">Attorney intake/review</button>
@@ -1790,23 +1798,40 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_KEY, {
           <h2 style="margin:0">Upload and extract</h2>
           <div><div class="label">Discovery type</div><select id="discoveryUploadType"><option value="interrogatories">Interrogatories</option><option value="disclosures">Request for Disclosure</option><option value="production">Request for Production</option><option value="admissions">Request for Admissions</option></select></div>
           <div><div class="label">Title</div><input id="discoveryTitle" type="text" placeholder="e.g., OC First Set of Interrogatories" /></div>
-          <div><div class="label">Date received</div><input id="discoveryDateReceived" type="date" /></div>
+          <div><div class="label">Date served/received</div><input id="discoveryDateReceived" type="date" /></div>
           <div><div class="label">Client response due</div><input id="discoveryClientDue" type="date" /></div>
-          <div><div class="label">Upload PDF, DOCX, or TXT</div><input id="discoveryUploadFile" type="file" accept=".pdf,.doc,.docx,.txt,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain" /></div>
-          <div class="hint">This page extracts text in the browser, then sends it to your Supabase Edge Function <b>extract-discovery</b>. If the function is not deployed yet, it uses a basic local numbered-paragraph fallback so you can test the page.</div>
-          <button id="discoveryExtractBtn" type="button" class="btnPrimary">Extract requests for review</button>
+          <div class="discoveryDocPicker"><div class="label">Choose discovery request from uploaded Documents</div><select id="discoverySourceDocumentSelect"></select><div class="hint">Upload the discovery request on the Documents page first. Then choose that document here for extraction.</div></div>
+          <div class="hint">This page reads text from the selected uploaded document, then sends it to your Supabase Edge Function <b>extract-discovery</b>. Scanned PDFs still require OCR before the text can be extracted.</div>
+          <button id="discoveryExtractBtn" type="button" class="btnPrimary">Extract selected document for review</button>
           <div id="discoveryExtractStatus" class="hint"></div>
         </div>
         <div class="discoveryReviewCard">
           <div style="display:flex;justify-content:space-between;gap:10px;align-items:center;flex-wrap:wrap"><h2 style="margin:0">Attorney review</h2><span id="discoverySelectedSetPill" class="discoveryStatusPill">No set selected</span></div>
-          <div class="hint">Uncheck requests you will answer yourself. Only checked requests are visible in the client response view.</div>
+          <div class="hint">Uncheck requests the client does not need to answer. They will still see the request and your note, but it will not count toward completion.</div>
           <div id="discoveryAttorneyList" style="display:grid;gap:10px"></div>
         </div>
       </div>
       <div id="discoveryClientPane" class="discoveryClientCard" style="display:none">
         <div style="display:flex;justify-content:space-between;gap:10px;align-items:center;flex-wrap:wrap"><h2 style="margin:0">Client response page</h2><span id="discoveryClientSelectedPill" class="discoveryStatusPill">No set selected</span></div>
-        <div class="hint">Answer each request, add questions/comments for your attorney, and upload files tied to that individual request.</div>
+        <div class="hint">Answer each request, add questions/comments for your attorney, and attach documents tied to that individual request.</div>
         <div id="discoveryClientList" class="discoveryClientAnswers"></div>
+      </div>
+      <div id="discoveryCompletionPane" class="discoveryClientCard" style="display:none">
+        <div style="display:flex;justify-content:space-between;gap:10px;align-items:center;flex-wrap:wrap"><h2 style="margin:0">Request Completion</h2><span id="discoveryCompletionSelectedPill" class="discoveryStatusPill">No set selected</span></div>
+        <div class="discoveryModeBar"><button id="discoveryDownloadZipBtn" type="button" class="btnPrimary">Download responses + uploaded files</button></div>
+        <div id="discoveryCompletionHost" class="discoveryCompletionGrid"></div>
+      </div>
+    </div>
+    <div id="discoveryDocumentModal" class="discoveryModal">
+      <div class="discoveryModalCard">
+        <div style="display:flex;justify-content:space-between;gap:10px;align-items:center"><h3 style="margin:0">Upload document for discovery response</h3><button type="button" id="discoveryDocModalClose" class="btnGhost">Close</button></div>
+        <div class="hint" id="discoveryDocModalRequestLabel"></div>
+        <div><div class="label">File</div><input id="discoveryDocModalFile" type="file" /></div>
+        <div><div class="label">Document name</div><input id="discoveryDocModalName" type="text" placeholder="Document name" /></div>
+        <div><div class="label">Document date</div><input id="discoveryDocModalDate" type="date" /></div>
+        <div><div class="label">Description</div><textarea id="discoveryDocModalDesc" placeholder="Describe the document or what request it responds to"></textarea></div>
+        <div class="hint">This creates a normal document on the Documents page, tags it under Client Discovery Responses, and attaches it to this request.</div>
+        <div class="discoveryModalActions"><button type="button" id="discoveryDocModalSave" class="btnPrimary">Upload and attach</button></div>
       </div>
     </div>
 
@@ -11559,6 +11584,7 @@ const endpoint = `${SUPABASE_URL}/functions/v1/finalize-exhibit-packet`;
     'Documents already produced or uploaded'
   ];
   let discoveryState = { sets: [], requests: [], responses: [], files: [], selectedSetId: '', mode: 'attorney', loaded: false, supabaseOk: true };
+  let discoveryUploadModalRequestId = '';
   function discoveryUid(){ return (crypto && crypto.randomUUID) ? crypto.randomUUID() : 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => { const r = Math.random()*16|0; const v = c === 'x' ? r : (r&0x3|0x8); return v.toString(16); }); }
 
   function normalizeDiscoveryType(type){
@@ -11569,6 +11595,33 @@ const endpoint = `${SUPABASE_URL}/functions/v1/finalize-exhibit-packet`;
     return 'interrogatories';
   }
   function getDiscoveryLabel(type){ return DISCOVERY_TYPE_LABELS[normalizeDiscoveryType(type)] || 'Discovery'; }
+  function getDiscoveryAbbr(type){ return DISCOVERY_TYPE_ABBR[normalizeDiscoveryType(type)] || 'Discovery'; }
+  function discoveryDateShort(dateValue){
+    const raw = String(dateValue || '').trim();
+    if(!raw) return 'no.date';
+    const parts = raw.split('-');
+    if(parts.length === 3) return `${String(parts[1]).padStart(2,'0')}.${String(parts[2]).padStart(2,'0')}.${String(parts[0]).slice(-2)}`;
+    const nums = raw.match(/\d+/g) || [];
+    if(nums.length >= 3) return `${String(nums[0]).padStart(2,'0')}.${String(nums[1]).padStart(2,'0')}.${String(nums[2]).slice(-2)}`;
+    return raw.replace(/[^0-9]+/g,'.').replace(/^\.+|\.+$/g,'') || 'no.date';
+  }
+  function discoverySetTagName(set){ return `${discoveryDateShort(set?.date_received || set?.created_at || '')} ${getDiscoveryAbbr(set?.discovery_type || '')}`; }
+  function discoveryRequestTagName(req){ return `Req. ${String(req?.request_number || '').trim() || 'No Number'}`; }
+  function discoveryDownloadPrefix(set, req){ return `req.${String(req?.request_number || '').replace(/[^a-zA-Z0-9._-]+/g,'_') || 'no_number'}_${discoveryDateShort(set?.date_received || set?.created_at || '')}_${getDiscoveryAbbr(req?.request_type || set?.discovery_type || '')}`; }
+  function getDiscoverySourceDocuments(){
+    const docs = Array.isArray(state?.documents) && state.documents.length ? state.documents : (Array.isArray(window.loadedDocuments) ? window.loadedDocuments : []);
+    return docs.filter(d => d && (d.filePath || d.file_path || d.storage_path || d.hasFile || d.has_file));
+  }
+  function getDiscoverySourceDocumentById(id){ return getDiscoverySourceDocuments().find(d => String(d.id) === String(id)) || null; }
+  function getAnyDocumentFilePath(doc){ return String(doc?.filePath || doc?.file_path || doc?.storage_path || doc?.path || ''); }
+  function getAnyDocumentOriginalFileName(doc){ return String(doc?.originalFileName || doc?.original_file_name || doc?.filename || doc?.file_name || doc?.name || 'document'); }
+  function populateDiscoverySourceDocumentSelect(){
+    const sel = $('discoverySourceDocumentSelect'); if(!sel) return;
+    const current = sel.value || '';
+    const docs = getDiscoverySourceDocuments();
+    sel.innerHTML = docs.length ? '<option value="">Choose an uploaded document...</option>' + docs.map(doc => `<option value="${escapeHtml(doc.id)}">${escapeHtml(doc.name || getAnyDocumentOriginalFileName(doc))}${getAnyDocumentFilePath(doc) ? '' : ' (no file)'}</option>`).join('') : '<option value="">No uploaded documents with files found</option>';
+    if(current && docs.some(d => String(d.id) === String(current))) sel.value = current;
+  }
   function setDiscoveryStatus(text){ const el = $('discoveryExtractStatus'); if(el) el.textContent = text || ''; }
   function saveDiscoveryLocal(){
     try{ localStorage.setItem(DISCOVERY_STORAGE_KEY(), JSON.stringify(discoveryState)); }catch(e){ console.warn('Could not save discovery locally', e); }
@@ -11659,14 +11712,20 @@ const endpoint = `${SUPABASE_URL}/functions/v1/finalize-exhibit-packet`;
     return new TextDecoder('utf-8').decode(buffer);
   }
 
-  async function uploadDiscoverySourceFile(setId, file){
-    if(!file || !window.supabase) return '';
-    const safeName = sanitizeFileName(file.name || 'discovery');
-    const path = `${getCaseId()}/discovery/source/${setId}/${Date.now()}_${safeName}`;
-    const { error } = await supabase.storage.from(window.DOCUMENT_BUCKET || 'case-documents').upload(path, file, { upsert:true, contentType:file.type || undefined });
-    if(error){ console.warn('Discovery source file upload failed', error); return ''; }
-    return path;
+  async function getDiscoverySourceFileFromDocument(doc){
+    if(!doc) throw new Error('Choose an uploaded document first.');
+    const filePath = getAnyDocumentFilePath(doc);
+    if(!filePath) throw new Error('The selected document does not have an uploaded file.');
+    const url = window.getDocumentPublicUrl ? window.getDocumentPublicUrl(filePath) : '';
+    if(!url) throw new Error('Could not create a download URL for the selected document.');
+    const res = await fetch(url);
+    if(!res.ok) throw new Error('Could not download the selected document for extraction.');
+    const blob = await res.blob();
+    const name = getAnyDocumentOriginalFileName(doc) || doc.name || filePath.split('/').pop() || 'document';
+    try{ return new File([blob], name, { type: blob.type || doc.mimeType || doc.mime_type || '' }); }
+    catch(e){ blob.name = name; return blob; }
   }
+
 
   function localExtractDiscoveryRequests(rawText, type){
     const clean = String(rawText || '').replace(/\r/g, '').replace(/[ \t]+/g, ' ').trim();
@@ -11714,11 +11773,8 @@ const endpoint = `${SUPABASE_URL}/functions/v1/finalize-exhibit-packet`;
     }
   }
 
-  async function saveDiscoverySetAndRequests(setPayload, requestPayloads, file){
-    const localSet = { id: discoveryUid(), case_id:getCaseId(), created_at:new Date().toISOString(), client_instructions:'', ...setPayload };
-    const sourcePath = await uploadDiscoverySourceFile(localSet.id, file);
-    localSet.source_file_path = sourcePath;
-    localSet.source_file_name = file?.name || '';
+  async function saveDiscoverySetAndRequests(setPayload, requestPayloads, sourceDoc){
+    const localSet = { id: discoveryUid(), case_id:getCaseId(), created_at:new Date().toISOString(), client_instructions:'', source_document_id: sourceDoc?.id || null, source_file_path: getAnyDocumentFilePath(sourceDoc), source_file_name: getAnyDocumentOriginalFileName(sourceDoc), ...setPayload };
     try{
       if(window.supabase){
         const { data:setRow, error:setError } = await supabase.from('discovery_sets').insert(localSet).select().single();
@@ -11730,13 +11786,13 @@ const endpoint = `${SUPABASE_URL}/functions/v1/finalize-exhibit-packet`;
         discoveryState.requests = discoveryState.requests.concat(reqRows || rows);
         discoveryState.selectedSetId = setRow.id;
         discoveryState.supabaseOk = true;
+        await ensureClientDiscoveryResponseTagsForSet(setRow, reqRows || rows);
         saveDiscoveryLocal();
         return setRow;
       }
     }catch(error){
       console.warn('Could not save discovery to Supabase, saving locally.', error);
       discoveryState.supabaseOk = false;
-      localSet.source_file_path = sourcePath;
       discoveryState.sets.unshift(localSet);
       discoveryState.requests = discoveryState.requests.concat(requestPayloads.map((r,i)=>({ id: discoveryUid(), case_id:getCaseId(), discovery_set_id:localSet.id, request_type:normalizeDiscoveryType(r.request_type || localSet.discovery_type), request_number:String(r.request_number || i + 1), request_text:String(r.request_text || '').trim(), send_to_client:r.send_to_client !== false, sort_order:i+1, attorney_notes:'', confidence:r.confidence || null })));
       discoveryState.selectedSetId = localSet.id;
@@ -11744,6 +11800,46 @@ const endpoint = `${SUPABASE_URL}/functions/v1/finalize-exhibit-packet`;
       return localSet;
     }
   }
+
+  function getLoadedTagByNameAndParent(name, parentId){
+    const tags = Array.isArray(window.loadedTags) ? window.loadedTags : [];
+    return tags.find(t => String(t.name || '').trim().toLowerCase() === String(name || '').trim().toLowerCase() && String(t.parent_id || '') === String(parentId || '')) || null;
+  }
+  async function ensureDiscoveryTag(name, parentId=null){
+    let found = getLoadedTagByNameAndParent(name, parentId);
+    if(found) return found;
+    if(window.createTagRow){
+      found = await window.createTagRow({ name, parentId: parentId || null, iconId:'' });
+      if(found){ window.loadedTags = Array.isArray(window.loadedTags) ? window.loadedTags.concat([found]) : [found]; return found; }
+    }
+    return null;
+  }
+  async function ensureClientDiscoveryResponseTagsForSet(set, reqs=[]){
+    const root = await ensureDiscoveryTag('Client Discovery Responses', null);
+    if(!root) return {};
+    const setTag = await ensureDiscoveryTag(discoverySetTagName(set), root.id);
+    const reqTags = {};
+    if(setTag){
+      for(const req of (reqs || [])){
+        const reqTag = await ensureDiscoveryTag(discoveryRequestTagName(req), setTag.id);
+        if(reqTag) reqTags[req.id] = reqTag;
+      }
+    }
+    return { root, setTag, reqTags };
+  }
+  async function applyDiscoveryTagsToDocument(docId, set, req){
+    const tags = await ensureClientDiscoveryResponseTagsForSet(set, [req]);
+    const ids = [tags.root?.id, tags.setTag?.id, tags.reqTags?.[req.id]?.id].filter(Boolean);
+    for(const tagId of ids){ try{ if(window.assignDocumentTag) await window.assignDocumentTag(docId, tagId); }catch(e){ console.warn('Could not assign discovery tag', tagId, e); } }
+    try{
+      if(window.updateDocumentRow && tags.root?.id && tags.setTag?.id){
+        const links = [{ tagId: tags.root.id, subtagId: tags.setTag.id }];
+        if(tags.reqTags?.[req.id]?.id) links.push({ tagId: tags.setTag.id, subtagId: tags.reqTags[req.id].id });
+        await window.updateDocumentRow(docId, { tag_links: links });
+      }
+    }catch(e){ console.warn('Could not save discovery tag links on document', e); }
+  }
+
 
   async function updateDiscoverySet(setId, patch){
     const set = discoveryState.sets.find(s => s.id === setId); if(!set) return;
@@ -11772,23 +11868,70 @@ const endpoint = `${SUPABASE_URL}/functions/v1/finalize-exhibit-packet`;
       if(error) console.warn('Discovery response save failed', error);
     }
   }
-  async function uploadDiscoveryResponseFile(requestId, file){
+  async function createDiscoveryResponseDocument(requestId, file, meta){
     if(!file) return;
-    const safeName = sanitizeFileName(file.name || 'file');
-    const local = { id:discoveryUid(), case_id:getCaseId(), request_id:requestId, file_name:file.name || safeName, file_type:file.type || '', file_size:file.size || 0, file_path:'', created_at:new Date().toISOString() };
+    const req = (discoveryState.requests || []).find(r => r.id === requestId);
+    const set = req ? (discoveryState.sets || []).find(s => s.id === req.discovery_set_id) : getSelectedDiscoverySet();
+    const name = String(meta?.name || file.name || 'Discovery response document').trim();
+    const docDate = meta?.date || null;
+    const desc = String(meta?.description || '').trim();
+    let created = null;
     try{
-      const path = `${getCaseId()}/discovery/responses/${requestId}/${Date.now()}_${safeName}`;
-      if(window.supabase){
+      if(window.createDocument){
+        created = await window.createDocument({ name, docDate, description: desc, status:'neither' });
+        if(!created) throw new Error('Could not create document row.');
+        const path = await window.uploadDocumentFile(created.id, file);
+        if(!path) throw new Error('Document row created, but file upload failed.');
+        const updated = await window.updateDocumentRow(created.id, { file_path:path, original_file_name:file.name || '', mime_type:file.type || '', file_size:Number(file.size || 0) || 0, description:desc, doc_date:docDate });
+        created = updated || { ...created, file_path:path, original_file_name:file.name || '', mime_type:file.type || '', file_size:Number(file.size || 0) || 0 };
+      }
+    }catch(error){
+      console.warn('Could not create normal document for discovery response; falling back to direct file record.', error);
+    }
+    const safeName = sanitizeFileName(file.name || 'file');
+    const local = { id:discoveryUid(), case_id:getCaseId(), request_id:requestId, response_id:null, document_id:created?.id || null, file_name:file.name || safeName, file_type:file.type || '', file_size:file.size || 0, file_path:created?.file_path || '', created_at:new Date().toISOString() };
+    try{
+      if(created?.id && set && req) await applyDiscoveryTagsToDocument(created.id, set, req);
+      if(!local.file_path && window.supabase){
+        const path = `${getCaseId()}/discovery/responses/${requestId}/${Date.now()}_${safeName}`;
         const { error:upErr } = await supabase.storage.from(window.DOCUMENT_BUCKET || 'case-documents').upload(path, file, { upsert:true, contentType:file.type || undefined });
         if(upErr) throw upErr;
         local.file_path = path;
+      }
+      if(window.supabase && discoveryState.supabaseOk){
         const { data, error } = await supabase.from('discovery_files').insert(local).select().single();
         if(error) throw error;
         discoveryState.files.push(data);
       } else discoveryState.files.push(local);
-    }catch(error){ console.warn('Discovery file upload failed; recorded locally only.', error); discoveryState.files.push(local); }
+      if(window.loadDocuments) await window.loadDocuments();
+    }catch(error){ console.warn('Discovery file record failed; recorded locally only.', error); discoveryState.files.push(local); }
     saveDiscoveryLocal(); renderDiscovery();
   }
+  function openDiscoveryDocumentModal(requestId){
+    discoveryUploadModalRequestId = requestId || '';
+    const req = (discoveryState.requests || []).find(r => r.id === requestId);
+    const set = req ? (discoveryState.sets || []).find(s => s.id === req.discovery_set_id) : getSelectedDiscoverySet();
+    const modal = $('discoveryDocumentModal'); if(!modal) return;
+    $('discoveryDocModalRequestLabel') && ($('discoveryDocModalRequestLabel').textContent = req ? `${getDiscoveryAbbr(req.request_type)} ${discoveryDateShort(set?.date_received || '')} Request ${req.request_number || ''}` : '');
+    if($('discoveryDocModalFile')) $('discoveryDocModalFile').value = '';
+    if($('discoveryDocModalName')) $('discoveryDocModalName').value = '';
+    if($('discoveryDocModalDate')) $('discoveryDocModalDate').value = '';
+    if($('discoveryDocModalDesc')) $('discoveryDocModalDesc').value = req ? `Client discovery response document for ${getDiscoveryAbbr(req.request_type)} ${discoveryDateShort(set?.date_received || '')} Request ${req.request_number || ''}.` : '';
+    modal.classList.add('open');
+  }
+  function closeDiscoveryDocumentModal(){ const modal = $('discoveryDocumentModal'); if(modal) modal.classList.remove('open'); discoveryUploadModalRequestId=''; }
+  async function saveDiscoveryDocumentModal(){
+    const requestId = discoveryUploadModalRequestId;
+    const file = $('discoveryDocModalFile')?.files?.[0];
+    if(!requestId){ alert('No request selected.'); return; }
+    if(!file){ alert('Choose a file first.'); return; }
+    const req = (discoveryState.requests || []).find(r => r.id === requestId);
+    const set = req ? (discoveryState.sets || []).find(s => s.id === req.discovery_set_id) : getSelectedDiscoverySet();
+    const defaultName = `${discoveryDownloadPrefix(set, req)}_${file.name || 'file'}`;
+    await createDiscoveryResponseDocument(requestId, file, { name: ($('discoveryDocModalName')?.value || '').trim() || defaultName, date:$('discoveryDocModalDate')?.value || null, description:$('discoveryDocModalDesc')?.value || '' });
+    closeDiscoveryDocumentModal();
+  }
+
 
   function renderDiscoveryDashboard(){
     const host = $('discoveryDashboardHost'); if(!host) return;
@@ -11797,10 +11940,11 @@ const endpoint = `${SUPABASE_URL}/functions/v1/finalize-exhibit-packet`;
     const types = ['disclosures','production','interrogatories','admissions'];
     host.innerHTML = '<div style="overflow:auto"><table class="discoverySummaryTable"><thead><tr><th>Date Received</th><th>Client Response Due</th><th>Request for Disclosures</th><th>Request for Production</th><th>Interrogatories</th><th>Request for Admissions</th></tr></thead><tbody>' + sets.map(set => {
       const selected = set.id === discoveryState.selectedSetId;
-      const cells = types.map(t => normalizeDiscoveryType(set.discovery_type) === t ? `<td class="center"><button type="button" class="discoveryClickable" data-discovery-open-set="${escapeHtml(set.id)}" data-discovery-open-mode="client" title="${escapeHtml(set.title || '')}">x</button></td>` : '<td></td>').join('');
+      const cells = types.map(t => normalizeDiscoveryType(set.discovery_type) === t ? `<td class="center"><div class="discoveryDownloadCell"><button type="button" class="discoveryClickable" data-discovery-open-set="${escapeHtml(set.id)}" data-discovery-open-mode="client" title="${escapeHtml(set.title || '')}">x</button><button type="button" class="discoveryDownloadLink" data-discovery-download-set="${escapeHtml(set.id)}">download responses</button></div></td>` : '<td></td>').join('');
       return `<tr style="${selected ? 'background:#f8fbff' : ''}"><td>${escapeHtml(formatDateForDisplay(set.date_received || '') || set.date_received || '')}</td><td>${escapeHtml(formatDateForDisplay(set.client_due_date || '') || set.client_due_date || '')}</td>${cells}</tr>`;
     }).join('') + '</tbody></table></div>';
     host.querySelectorAll('[data-discovery-open-set]').forEach(btn => btn.addEventListener('click', ()=> selectDiscoverySet(btn.getAttribute('data-discovery-open-set'), btn.getAttribute('data-discovery-open-mode') || 'client')));
+    host.querySelectorAll('[data-discovery-download-set]').forEach(btn => btn.addEventListener('click', async (e)=>{ e.preventDefault(); e.stopPropagation(); await downloadDiscoveryResponsesBundle(btn.getAttribute('data-discovery-download-set')); }));
   }
 
   function renderDiscoveryAttorneyList(){
@@ -11833,13 +11977,13 @@ const endpoint = `${SUPABASE_URL}/functions/v1/finalize-exhibit-packet`;
       const attyNotes = String(req.attorney_notes || '').trim();
       const noAnswerNotice = !required ? '<div class="setupBox">Your attorney has marked this request as not requiring a client response. Review the request and attorney comments, but you do not need to answer it unless your attorney asks you to.</div>' : '';
       const rfpAlreadyUploaded = resp.rfp_status === 'Documents already produced or uploaded';
-      return `<div class="discoveryRequestRow ${!required ? 'discoveryNoAnswerNeeded' : ''}"><div class="discoveryRequestTop"><div class="discoveryReqNumber">${escapeHtml(getDiscoveryLabel(req.request_type))} ${escapeHtml(req.request_number || '')}</div><span class="hint">${required ? 'Response required' : 'No response required'} • Files: ${files.length}</span></div><div class="discoveryReqText">${escapeHtml(req.request_text || '')}</div><div class="discoveryInstructionsBox"><div class="label">Attorney's Comments:</div><div class="discoveryReqText">${attyNotes ? escapeHtml(attyNotes) : 'None'}</div></div>${noAnswerNotice}${isRfp ? `<div><div class="label">Response</div><select data-discovery-rfp-status="${escapeHtml(req.id)}" ${!required ? 'disabled' : ''}><option value="">Choose response...</option>${DISCOVERY_RFP_OPTIONS.map(opt => `<option value="${escapeHtml(opt)}" ${resp.rfp_status === opt ? 'selected' : ''}>${escapeHtml(opt)}</option>`).join('')}</select></div>${rfpAlreadyUploaded ? `<div><div class="label">Which request(s) were the documents uploaded to?</div><textarea data-discovery-rfp-upload-notes="${escapeHtml(req.id)}" placeholder="Example: Uploaded under RFP 4 and RFP 7, or document names/locations.">${escapeHtml(resp.rfp_upload_notes || '')}</textarea></div>` : ''}` : `<div><div class="label">Your answer</div><textarea data-discovery-client-response="${escapeHtml(req.id)}" placeholder="Type your answer here" ${!required ? 'disabled' : ''}>${escapeHtml(resp.client_response || '')}</textarea></div>`}<div><div class="label">Questions / comments to your attorney</div><textarea data-discovery-client-comments="${escapeHtml(req.id)}" placeholder="Ask your attorney a question or explain anything you are unsure about">${escapeHtml(resp.client_comments || '')}</textarea></div><div><div class="label">Upload files for this request</div><input type="file" multiple data-discovery-file-input="${escapeHtml(req.id)}" /></div><div class="discoveryFileList">${files.length ? files.map(f => `<div class="discoveryFilePill"><span>${escapeHtml(f.file_name || 'File')}</span>${f.file_path ? `<a target="_blank" rel="noopener" href="${escapeHtml(getDocumentPublicUrl(f.file_path))}">Open</a>` : '<span class="hint">local only</span>'}</div>`).join('') : '<div class="hint">No files uploaded for this request yet.</div>'}</div></div>`;
+      return `<div class="discoveryRequestRow ${!required ? 'discoveryNoAnswerNeeded' : ''}"><div class="discoveryRequestTop"><div class="discoveryReqNumber">${escapeHtml(getDiscoveryLabel(req.request_type))} ${escapeHtml(req.request_number || '')}</div><span class="hint">${required ? 'Response required' : 'No response required'} • Files: ${files.length}</span></div><div class="discoveryReqText">${escapeHtml(req.request_text || '')}</div><div class="discoveryInstructionsBox"><div class="label">Attorney's Comments:</div><div class="discoveryReqText">${attyNotes ? escapeHtml(attyNotes) : 'None'}</div></div>${noAnswerNotice}${isRfp ? `<div><div class="label">Response</div><select data-discovery-rfp-status="${escapeHtml(req.id)}" ${!required ? 'disabled' : ''}><option value="">Choose response...</option>${DISCOVERY_RFP_OPTIONS.map(opt => `<option value="${escapeHtml(opt)}" ${resp.rfp_status === opt ? 'selected' : ''}>${escapeHtml(opt)}</option>`).join('')}</select></div>${rfpAlreadyUploaded ? `<div><div class="label">Which request(s) were the documents uploaded to?</div><textarea data-discovery-rfp-upload-notes="${escapeHtml(req.id)}" placeholder="Example: Uploaded under RFP 4 and RFP 7, or document names/locations.">${escapeHtml(resp.rfp_upload_notes || '')}</textarea></div>` : ''}` : `<div><div class="label">Your answer</div><textarea data-discovery-client-response="${escapeHtml(req.id)}" placeholder="Type your answer here" ${!required ? 'disabled' : ''}>${escapeHtml(resp.client_response || '')}</textarea></div>`}<div><div class="label">Questions / comments to your attorney</div><textarea data-discovery-client-comments="${escapeHtml(req.id)}" placeholder="Ask your attorney a question or explain anything you are unsure about">${escapeHtml(resp.client_comments || '')}</textarea></div><div><div class="label">Upload files for this request</div><button type="button" class="btnPrimary discoveryUploadButton" data-discovery-open-upload="${escapeHtml(req.id)}">Upload document</button></div><div class="discoveryFileList">${files.length ? files.map(f => `<div class="discoveryFilePill"><span>${escapeHtml(f.file_name || 'File')}</span>${f.file_path ? `<a target="_blank" rel="noopener" href="${escapeHtml(getDocumentPublicUrl(f.file_path))}">Open</a>` : '<span class="hint">local only</span>'}</div>`).join('') : '<div class="hint">No files uploaded for this request yet.</div>'}</div></div>`;
     }).join('') : '<div class="empty">There are no requests in this discovery set.</div>');
     host.querySelectorAll('[data-discovery-client-response]').forEach(el => el.addEventListener('blur', () => updateDiscoveryResponse(el.getAttribute('data-discovery-client-response'), { client_response:el.value || '' })));
     host.querySelectorAll('[data-discovery-client-comments]').forEach(el => el.addEventListener('blur', () => updateDiscoveryResponse(el.getAttribute('data-discovery-client-comments'), { client_comments:el.value || '' })));
     host.querySelectorAll('[data-discovery-rfp-status]').forEach(el => el.addEventListener('change', () => updateDiscoveryResponse(el.getAttribute('data-discovery-rfp-status'), { rfp_status:el.value || '' })));
     host.querySelectorAll('[data-discovery-rfp-upload-notes]').forEach(el => el.addEventListener('blur', () => updateDiscoveryResponse(el.getAttribute('data-discovery-rfp-upload-notes'), { rfp_upload_notes:el.value || '' })));
-    host.querySelectorAll('[data-discovery-file-input]').forEach(input => input.addEventListener('change', async () => { const requestId = input.getAttribute('data-discovery-file-input'); for(const file of Array.from(input.files || [])) await uploadDiscoveryResponseFile(requestId, file); input.value=''; }));
+    host.querySelectorAll('[data-discovery-open-upload]').forEach(btn => btn.addEventListener('click', () => openDiscoveryDocumentModal(btn.getAttribute('data-discovery-open-upload'))));
   }
 
   function renderDiscoveryCompletion(){
@@ -11862,51 +12006,54 @@ const endpoint = `${SUPABASE_URL}/functions/v1/finalize-exhibit-packet`;
     }).join('') : '<div class="empty">No requests in this discovery set.</div>');
   }
 
-  function discoveryZipDate(dateValue){
-    const raw = String(dateValue || '').trim();
-    if(!raw) return 'no_date';
-    const parts = raw.split('-');
-    if(parts.length === 3) return `${Number(parts[1])}.${Number(parts[2])}.${parts[0]}`;
-    return raw.replace(/[^0-9]+/g,'.').replace(/^\.+|\.+$/g,'') || 'no_date';
-  }
+  function discoveryZipDate(dateValue){ return discoveryDateShort(dateValue); }
   function discoveryFolderName(set, req){
-    const abbr = DISCOVERY_TYPE_ABBR[normalizeDiscoveryType(req.request_type)] || 'Discovery';
-    const date = discoveryZipDate(set.date_received || set.created_at || '');
+    const abbr = getDiscoveryAbbr(req.request_type || set.discovery_type);
+    const date = discoveryDateShort(set.date_received || set.created_at || '');
     const num = String(req.request_number || '').replace(/[^a-zA-Z0-9._-]+/g,'_') || 'no_number';
-    return `${abbr}_${date}_Request_${num}`;
+    return `${date}_${abbr}_req.${num}`;
   }
-  async function downloadDiscoveryFilesZip(){
-    const set = getSelectedDiscoverySet(); if(!set){ alert('Select a discovery set first.'); return; }
+  function prefixedDiscoveryFileName(set, req, originalName){ return `${discoveryDownloadPrefix(set, req)}_${sanitizeFileName(originalName || 'file')}`; }
+  function discoveryWordBlob(set){
+    const reqs = discoveryRequestsForSet(set.id, true);
+    const rows = reqs.map(req => { const resp = getDiscoveryResponse(req.id); const files = discoveryFilesForRequest(req.id); const answer = normalizeDiscoveryType(req.request_type) === 'production' ? (resp.rfp_status || '') : (resp.client_response || ''); return `<h3>${escapeHtml(getDiscoveryLabel(req.request_type))} No. ${escapeHtml(req.request_number || '')}</h3><p><b>Request:</b> ${escapeHtml(req.request_text || '')}</p><p><b>Response required:</b> ${discoveryRequestRequiresResponse(req) ? 'Yes' : 'No'}</p><p><b>Attorney comments to client:</b> ${escapeHtml(req.attorney_notes || 'None')}</p><p><b>Client response:</b> ${escapeHtml(answer || '')}</p>${resp.rfp_upload_notes ? `<p><b>Uploaded-to note:</b> ${escapeHtml(resp.rfp_upload_notes)}</p>` : ''}<p><b>Client comments/questions:</b> ${escapeHtml(resp.client_comments || '')}</p><p><b>Files:</b> ${files.map(f => escapeHtml(f.file_name || '')).join(', ') || 'None'}</p><hr>`; }).join('');
+    const html = `<!doctype html><html><head><meta charset="utf-8"><title>${escapeHtml(set.title || 'Discovery Responses')}</title></head><body><h1>${escapeHtml(set.title || 'Discovery Responses')}</h1><p><b>Type:</b> ${escapeHtml(getDiscoveryLabel(set.discovery_type))}</p><p><b>Date served/received:</b> ${escapeHtml(formatDateForDisplay(set.date_received || '') || '')}</p><p><b>Client due:</b> ${escapeHtml(formatDateForDisplay(set.client_due_date || '') || '')}</p><h2>Attorney instructions</h2><p>${escapeHtml(set.client_instructions || 'None')}</p>${rows}</body></html>`;
+    return new Blob([html], { type:'application/msword' });
+  }
+
+  async function downloadDiscoveryResponsesBundle(setId=null){
+    const set = setId ? (discoveryState.sets || []).find(s => String(s.id) === String(setId)) : getSelectedDiscoverySet();
+    if(!set){ alert('Select a discovery set first.'); return; }
     if(!window.JSZip){ alert('JSZip is not available on this page.'); return; }
     const zip = new JSZip();
+    zip.file(`${sanitizeFileName(set.title || 'discovery_responses')}_responses.doc`, discoveryWordBlob(set));
     const reqs = discoveryRequestsForSet(set.id, true);
     let count = 0;
     for(const req of reqs){
       const files = discoveryFilesForRequest(req.id).filter(f => f.file_path);
-      if(!files.length) continue;
-      const folder = zip.folder(discoveryFolderName(set, req));
       for(const f of files){
         try{
           const url = getDocumentPublicUrl(f.file_path);
           const res = await fetch(url);
           if(!res.ok) throw new Error('Could not download ' + (f.file_name || f.file_path));
           const blob = await res.blob();
-          folder.file(sanitizeFileName(f.file_name || 'file'), blob);
+          zip.file(prefixedDiscoveryFileName(set, req, f.file_name || f.file_path), blob);
           count++;
         }catch(e){
           console.warn('Could not add discovery file to zip', f, e);
-          folder.file(`ERROR_${sanitizeFileName(f.file_name || 'file')}.txt`, String(e?.message || e));
+          zip.file(`ERROR_${prefixedDiscoveryFileName(set, req, f.file_name || 'file')}.txt`, String(e?.message || e));
         }
       }
     }
-    if(!count){ alert('No uploaded files are available for this discovery set yet.'); return; }
     const blob = await zip.generateAsync({ type:'blob' });
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
-    a.download = `${sanitizeFileName(set.title || 'discovery_files')}_files.zip`;
+    a.download = `${sanitizeFileName(set.title || 'discovery_responses')}_responses_and_files.zip`;
     document.body.appendChild(a); a.click();
     setTimeout(()=>{ URL.revokeObjectURL(a.href); a.remove(); }, 1000);
   }
+  async function downloadDiscoveryFilesZip(){ return downloadDiscoveryResponsesBundle(); }
+
 
   async function renderDiscovery(){
     if(!discoveryState.loaded) await loadDiscoveryData();
@@ -11919,35 +12066,37 @@ const endpoint = `${SUPABASE_URL}/functions/v1/finalize-exhibit-packet`;
     if($('discoveryAttorneyModeBtn')){ $('discoveryAttorneyModeBtn').style.display = attorneyAllowed ? '' : 'none'; $('discoveryAttorneyModeBtn').className = discoveryState.mode === 'attorney' ? 'btnPrimary' : 'btnGhost'; }
     if($('discoveryClientModeBtn')) $('discoveryClientModeBtn').className = discoveryState.mode === 'client' || !attorneyAllowed ? 'btnPrimary' : 'btnGhost';
     if($('discoveryCompletionModeBtn')) $('discoveryCompletionModeBtn').className = discoveryState.mode === 'completion' ? 'btnPrimary' : 'btnGhost';
-    renderDiscoveryDashboard(); renderDiscoveryAttorneyList(); renderDiscoveryClientList(); renderDiscoveryCompletion();
+    populateDiscoverySourceDocumentSelect(); renderDiscoveryDashboard(); renderDiscoveryAttorneyList(); renderDiscoveryClientList(); renderDiscoveryCompletion();
   }
   window.renderDiscovery = renderDiscovery;
 
   async function handleDiscoveryExtract(){
-    const file = $('discoveryUploadFile')?.files?.[0];
+    const sourceDocId = $('discoverySourceDocumentSelect')?.value || '';
+    const sourceDoc = getDiscoverySourceDocumentById(sourceDocId);
     const type = normalizeDiscoveryType($('discoveryUploadType')?.value || 'interrogatories');
-    const title = String($('discoveryTitle')?.value || '').trim() || (file ? file.name : getDiscoveryLabel(type));
-    if(!file){ alert('Choose a PDF, DOCX, or TXT file first.'); return; }
-    setDiscoveryStatus('Extracting text from file...');
+    const title = String($('discoveryTitle')?.value || '').trim() || (sourceDoc ? (sourceDoc.name || getAnyDocumentOriginalFileName(sourceDoc)) : getDiscoveryLabel(type));
+    if(!sourceDoc){ alert('Choose an uploaded document from the Documents page first.'); return; }
+    setDiscoveryStatus('Loading selected document...');
     try{
+      const file = await getDiscoverySourceFileFromDocument(sourceDoc);
+      setDiscoveryStatus('Extracting text from selected document...');
       const rawText = await readDiscoveryFileText(file);
       if(!rawText.trim()) throw new Error('No text could be extracted from this file. If it is a scanned PDF, run OCR first or add OCR to the Edge Function.');
       setDiscoveryStatus('Sending text to discovery extraction API...');
-      const requests = await callDiscoveryExtractionApi(rawText, type, file.name);
-      const set = await saveDiscoverySetAndRequests({ title, discovery_type:type, date_received:$('discoveryDateReceived')?.value || null, client_due_date:$('discoveryClientDue')?.value || null, extraction_status:'review', client_instructions:'' }, requests, file);
+      const requests = await callDiscoveryExtractionApi(rawText, type, getAnyDocumentOriginalFileName(sourceDoc));
+      const set = await saveDiscoverySetAndRequests({ title, discovery_type:type, date_received:$('discoveryDateReceived')?.value || null, client_due_date:$('discoveryClientDue')?.value || null, extraction_status:'review', client_instructions:'' }, requests, sourceDoc);
       setDiscoveryStatus(`Extracted ${requests.length} request(s). Review them before sending to the client.`);
       discoveryState.mode = 'attorney'; discoveryState.selectedSetId = set.id; discoveryState.loaded = true; saveDiscoveryLocal(); renderDiscovery();
     }catch(error){ console.error('Discovery extraction failed', error); setDiscoveryStatus('Extraction failed: ' + (error?.message || error)); alert('Extraction failed: ' + (error?.message || error)); }
   }
 
+
   function downloadDiscoveryWord(){
     const set = getSelectedDiscoverySet(); if(!set){ alert('Select a discovery set first.'); return; }
-    const reqs = discoveryRequestsForSet(set.id, true);
-    const rows = reqs.map(req => { const resp = getDiscoveryResponse(req.id); const files = discoveryFilesForRequest(req.id); const answer = normalizeDiscoveryType(req.request_type) === 'production' ? (resp.rfp_status || '') : (resp.client_response || ''); return `<h3>${escapeHtml(getDiscoveryLabel(req.request_type))} No. ${escapeHtml(req.request_number || '')}</h3><p><b>Request:</b> ${escapeHtml(req.request_text || '')}</p><p><b>Response required:</b> ${discoveryRequestRequiresResponse(req) ? 'Yes' : 'No'}</p><p><b>Attorney comments to client:</b> ${escapeHtml(req.attorney_notes || 'None')}</p><p><b>Client response:</b> ${escapeHtml(answer || '')}</p>${resp.rfp_upload_notes ? `<p><b>Uploaded-to note:</b> ${escapeHtml(resp.rfp_upload_notes)}</p>` : ''}<p><b>Client comments/questions:</b> ${escapeHtml(resp.client_comments || '')}</p><p><b>Files:</b> ${files.map(f => escapeHtml(f.file_name || '')).join(', ') || 'None'}</p><hr>`; }).join('');
-    const html = `<!doctype html><html><head><meta charset="utf-8"><title>${escapeHtml(set.title || 'Discovery Responses')}</title></head><body><h1>${escapeHtml(set.title || 'Discovery Responses')}</h1><p><b>Type:</b> ${escapeHtml(getDiscoveryLabel(set.discovery_type))}</p><p><b>Date received:</b> ${escapeHtml(formatDateForDisplay(set.date_received || '') || '')}</p><p><b>Client due:</b> ${escapeHtml(formatDateForDisplay(set.client_due_date || '') || '')}</p><h2>Attorney instructions</h2><p>${escapeHtml(set.client_instructions || 'None')}</p>${rows}</body></html>`;
-    const blob = new Blob([html], { type:'application/msword' });
+    const blob = discoveryWordBlob(set);
     const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `${(set.title || 'discovery-responses').replace(/[^a-z0-9]+/gi,'_')}.doc`; document.body.appendChild(a); a.click(); setTimeout(()=>{ URL.revokeObjectURL(a.href); a.remove(); }, 1000);
   }
+
 
   $('discoveryAttorneyModeBtn')?.addEventListener('click', ()=>{ discoveryState.mode='attorney'; saveDiscoveryLocal(); renderDiscovery(); });
   $('discoveryClientModeBtn')?.addEventListener('click', ()=>{ discoveryState.mode='client'; saveDiscoveryLocal(); renderDiscovery(); });
@@ -11956,6 +12105,9 @@ const endpoint = `${SUPABASE_URL}/functions/v1/finalize-exhibit-packet`;
   $('discoveryRefreshBtn')?.addEventListener('click', async ()=>{ discoveryState.loaded=false; await loadDiscoveryData(); renderDiscovery(); });
   $('discoveryExportWordBtn')?.addEventListener('click', downloadDiscoveryWord);
   $('discoveryExtractBtn')?.addEventListener('click', handleDiscoveryExtract);
+  $('discoveryDocModalClose')?.addEventListener('click', closeDiscoveryDocumentModal);
+  $('discoveryDocModalSave')?.addEventListener('click', saveDiscoveryDocumentModal);
+  $('discoveryDocModalFile')?.addEventListener('change', () => { const file = $('discoveryDocModalFile')?.files?.[0]; if(file && $('discoveryDocModalName') && !$('discoveryDocModalName').value) $('discoveryDocModalName').value = file.name || ''; });
 
 
   initializeCaseChatUi();
