@@ -1776,7 +1776,7 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_KEY, {
       <div class="discoveryTop">
         <div>
           <h2 style="margin-bottom:8px">Discovery</h2>
-          <div class="hint">Upload Interrogatories, Requests for Disclosure, Requests for Production, or Requests for Admission. Review extracted requests before sending them to the client. Clients see every extracted request, but unchecked requests are marked no response required and do not count toward completion.</div>
+          <div class="hint">Select an already-uploaded discovery document from Documents, then extract Interrogatories, Requests for Disclosure, Requests for Production, or Requests for Admission. Review extracted requests before sending them to the client. Clients see every extracted request, but unchecked requests are marked no response required and do not count toward completion.</div>
         </div>
         <div class="discoveryModeBar">
           <button id="discoveryAttorneyModeBtn" type="button" class="btnPrimary">Attorney intake/review</button>
@@ -1798,9 +1798,9 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_KEY, {
           <h2 style="margin:0">Upload and extract</h2>
           <div><div class="label">Discovery type</div><select id="discoveryUploadType"><option value="interrogatories">Interrogatories</option><option value="disclosures">Request for Disclosure</option><option value="production">Request for Production</option><option value="admissions">Request for Admissions</option></select></div>
           <div><div class="label">Client response due</div><input id="discoveryClientDue" type="date" /></div>
-          <div><div class="label">Upload discovery document</div><input id="discoveryUploadFile" type="file" accept=".pdf,.docx,.txt,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain" /><div class="hint">The discovery set title comes from the file name. The served/received date is pulled from a date in the file name when possible, otherwise today's date is used. The response date defaults to two weeks from today.</div></div>
-          <div class="hint">This page reads text from the uploaded discovery document, then sends it to your Supabase Edge Function <b>extract-discovery</b>. Scanned PDFs still require OCR before the text can be extracted.</div>
-          <button id="discoveryExtractBtn" type="button" class="btnPrimary">Extract uploaded document for review</button>
+          <div><div class="label">Choose discovery document from uploaded Documents</div><select id="discoverySourceDocumentSelect"><option value="">Loading uploaded documents...</option></select><div class="hint">First upload the discovery request on the Documents page. The discovery set title comes from that document name, and the served/received date comes from that document's date.</div></div>
+          <div class="hint">This page reads text from the selected case document, then sends it to your Supabase Edge Function <b>extract-discovery</b>. Scanned PDFs still require OCR before the text can be extracted.</div>
+          <button id="discoveryExtractBtn" type="button" class="btnPrimary">Extract selected document for review</button>
           <div id="discoveryExtractStatus" class="hint"></div>
         </div>
         <div class="discoveryReviewCard">
@@ -11625,6 +11625,7 @@ const endpoint = `${SUPABASE_URL}/functions/v1/finalize-exhibit-packet`;
   function getDiscoverySourceDocumentById(id){ return getDiscoverySourceDocuments().find(d => String(d.id) === String(id)) || null; }
   function getAnyDocumentFilePath(doc){ return String(doc?.filePath || doc?.file_path || doc?.storage_path || doc?.path || ''); }
   function getAnyDocumentOriginalFileName(doc){ return String(doc?.originalFileName || doc?.original_file_name || doc?.filename || doc?.file_name || doc?.name || 'document'); }
+  function getAnyDocumentDate(doc){ return String(doc?.docDate || doc?.doc_date || doc?.date || doc?.created_at || '').slice(0,10); }
   function populateDiscoverySourceDocumentSelect(){
     const sel = $('discoverySourceDocumentSelect'); if(!sel) return;
     const current = sel.value || '';
@@ -12076,35 +12077,42 @@ const endpoint = `${SUPABASE_URL}/functions/v1/finalize-exhibit-packet`;
     if($('discoveryAttorneyModeBtn')){ $('discoveryAttorneyModeBtn').style.display = attorneyAllowed ? '' : 'none'; $('discoveryAttorneyModeBtn').className = discoveryState.mode === 'attorney' ? 'btnPrimary' : 'btnGhost'; }
     if($('discoveryClientModeBtn')) $('discoveryClientModeBtn').className = discoveryState.mode === 'client' || !attorneyAllowed ? 'btnPrimary' : 'btnGhost';
     if($('discoveryCompletionModeBtn')) $('discoveryCompletionModeBtn').className = discoveryState.mode === 'completion' ? 'btnPrimary' : 'btnGhost';
-    ensureDiscoveryDueDefault(); renderDiscoveryDashboard(); renderDiscoveryAttorneyList(); renderDiscoveryClientList(); renderDiscoveryCompletion();
+    ensureDiscoveryDueDefault(); populateDiscoverySourceDocumentSelect(); renderDiscoveryDashboard(); renderDiscoveryAttorneyList(); renderDiscoveryClientList(); renderDiscoveryCompletion();
   }
   window.renderDiscovery = renderDiscovery;
 
   async function handleDiscoveryExtract(){
-    const file = $('discoveryUploadFile')?.files?.[0] || null;
+    const sourceDocId = $('discoverySourceDocumentSelect')?.value || '';
+    const sourceDoc = getDiscoverySourceDocumentById(sourceDocId);
     const type = normalizeDiscoveryType($('discoveryUploadType')?.value || 'interrogatories');
     const clientDue = $('discoveryClientDue')?.value || discoveryIsoPlusDays(14);
-    if(!file){ alert('Upload the discovery document first.'); return; }
-    const title = discoveryPrettyFileTitle(file.name || getDiscoveryLabel(type));
-    const dateReceived = inferDiscoveryDateFromFileName(file.name || '');
-    setDiscoveryStatus('Extracting text from uploaded discovery document...');
+    if(!sourceDoc){ alert('Select the uploaded discovery document from Documents first.'); return; }
+    const title = String(sourceDoc.name || getAnyDocumentOriginalFileName(sourceDoc) || getDiscoveryLabel(type)).trim() || getDiscoveryLabel(type);
+    const dateReceived = getAnyDocumentDate(sourceDoc) || discoveryTodayIso();
+    setDiscoveryStatus('Loading selected document from Documents...');
     try{
+      const file = await getDiscoverySourceFileFromDocument(sourceDoc);
+      setDiscoveryStatus('Extracting text from selected discovery document...');
       const rawText = await readDiscoveryFileText(file);
-      if(!rawText.trim()) throw new Error('No text could be extracted from this file. If it is a scanned PDF, run OCR first or add OCR to the Edge Function.');
+      if(!rawText.trim()) throw new Error('No text could be extracted from this document. If it is a scanned PDF, run OCR first or add OCR to the Edge Function.');
       setDiscoveryStatus('Sending text to discovery extraction API...');
-      const requests = await callDiscoveryExtractionApi(rawText, type, file.name || title);
-      let sourceFilePath = '';
-      try{
-        const tempDocId = discoveryUid();
-        if(window.uploadDocumentFile){
-          sourceFilePath = await window.uploadDocumentFile(tempDocId, file) || '';
-        }
-      }catch(e){ console.warn('Discovery source file upload skipped/failed.', e); }
-      const set = await saveDiscoverySetAndRequests({ title, discovery_type:type, date_received:dateReceived, client_due_date:clientDue, source_file_path:sourceFilePath, source_file_name:file.name || title, extraction_status:'review', client_instructions:'' }, requests, null);
+      const requests = await callDiscoveryExtractionApi(rawText, type, getAnyDocumentOriginalFileName(sourceDoc) || title);
+      const set = await saveDiscoverySetAndRequests({
+        title,
+        discovery_type:type,
+        date_received:dateReceived,
+        client_due_date:clientDue,
+        source_document_id:sourceDoc.id,
+        source_file_path:getAnyDocumentFilePath(sourceDoc),
+        source_file_name:getAnyDocumentOriginalFileName(sourceDoc) || title,
+        extraction_status:'review',
+        client_instructions:''
+      }, requests, sourceDoc);
       setDiscoveryStatus(`Extracted ${requests.length} request(s). Review them before sending to the client. Title: ${title}. Served/received date used: ${formatDateForDisplay(dateReceived) || dateReceived}.`);
       discoveryState.mode = 'attorney'; discoveryState.selectedSetId = set.id; discoveryState.loaded = true; saveDiscoveryLocal(); renderDiscovery();
     }catch(error){ console.error('Discovery extraction failed', error); setDiscoveryStatus('Extraction failed: ' + (error?.message || error)); alert('Extraction failed: ' + (error?.message || error)); }
   }
+
 
 
   function downloadDiscoveryWord(){
@@ -12121,7 +12129,7 @@ const endpoint = `${SUPABASE_URL}/functions/v1/finalize-exhibit-packet`;
   $('discoveryRefreshBtn')?.addEventListener('click', async ()=>{ discoveryState.loaded=false; await loadDiscoveryData(); renderDiscovery(); });
   $('discoveryExportWordBtn')?.addEventListener('click', downloadDiscoveryWord);
   $('discoveryExtractBtn')?.addEventListener('click', handleDiscoveryExtract);
-  $('discoveryUploadFile')?.addEventListener('change', () => { ensureDiscoveryDueDefault(); const file = $('discoveryUploadFile')?.files?.[0]; if(file) setDiscoveryStatus(`Ready to extract: ${file.name}. Served/received date will be ${formatDateForDisplay(inferDiscoveryDateFromFileName(file.name)) || inferDiscoveryDateFromFileName(file.name)}.`); });
+  $('discoverySourceDocumentSelect')?.addEventListener('change', () => { ensureDiscoveryDueDefault(); const doc = getDiscoverySourceDocumentById($('discoverySourceDocumentSelect')?.value || ''); if(doc) setDiscoveryStatus(`Ready to extract: ${doc.name || getAnyDocumentOriginalFileName(doc)}. Served/received date will be ${formatDateForDisplay(getAnyDocumentDate(doc)) || getAnyDocumentDate(doc) || 'today'}.`); });
   $('discoveryDocModalClose')?.addEventListener('click', closeDiscoveryDocumentModal);
   $('discoveryDocModalSave')?.addEventListener('click', saveDiscoveryDocumentModal);
   $('discoveryDocModalFile')?.addEventListener('change', () => { const file = $('discoveryDocModalFile')?.files?.[0]; if(file && $('discoveryDocModalName') && !$('discoveryDocModalName').value) $('discoveryDocModalName').value = file.name || ''; });
