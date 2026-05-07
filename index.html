@@ -1716,6 +1716,15 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_KEY, {
     .discoveryResponsesMenu:hover .discoveryResponsesMenuPanel,.discoveryResponsesMenu:focus-within .discoveryResponsesMenuPanel{display:grid;}
     .discoveryResponsesMenuPanel button{width:100%;text-align:left;box-shadow:none;border-radius:10px;background:#fff;}
     .discoveryTypeInstructionGrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px;}
+    .discoveryDueDays{display:grid;gap:2px;justify-items:center;text-align:center;}
+    .discoveryDueDaysNumber{font-size:30px;line-height:1;font-weight:950;color:#0b63ff;}
+    .discoveryDueDaysLabel{font-size:12px;line-height:1.1;color:#111827;font-weight:800;}
+    .discoveryAttorneyCommentBox{background:#fff!important;}
+    .discoveryNeedsHelp{border-color:#ef4444!important;background:#fff1f2!important;box-shadow:0 0 0 3px rgba(239,68,68,.12);}
+    .discoveryInstructionEditor{min-height:260px;border:1px solid var(--border);border-radius:14px;background:#fff;padding:12px;outline:none;overflow:auto;line-height:1.45;}
+    .discoveryInstructionEditor:empty:before{content:attr(data-placeholder);color:var(--muted);}
+    .discoveryInstructionEditor img{max-width:360px;max-height:260px;border:1px solid var(--border);border-radius:10px;display:block;margin:8px 0;}
+    .discoveryInstructionToolbar{display:flex;gap:6px;flex-wrap:wrap;align-items:center;}
     @media (max-width: 1000px){.discoveryGrid{grid-template-columns:1fr}.discoverySummaryTable{min-width:680px}}
 
   </style>
@@ -1788,7 +1797,7 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_KEY, {
           <div class="hint">Select an already-uploaded discovery document from Documents, then extract Interrogatories, Requests for Disclosure, Requests for Production, or Requests for Admission. Review extracted requests before sending them to the client. Clients see every extracted request, but unchecked requests are marked no response required and do not count toward completion.</div>
         </div>
         <div class="discoveryModeBar">
-          <button id="discoveryAttorneyModeBtn" type="button" class="btnPrimary">Attorney intake/review</button>
+          <button id="discoveryAttorneyModeBtn" type="button" class="btnPrimary">Attorney intake/review</button><button id="discoveryInstructionsBtn" type="button" class="btnGhost">Discovery Instructions</button>
         </div>
       </div>
       <div id="discoverySetupWarning" class="setupBox hidden"></div>
@@ -1805,7 +1814,7 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_KEY, {
           <div><div class="label">Client response due</div><input id="discoveryClientDue" type="date" /></div>
           <div><div class="label">Choose discovery document from uploaded Documents</div><select id="discoverySourceDocumentSelect"><option value="">Loading uploaded documents...</option></select><div class="hint">First upload the discovery request on the Documents page. The discovery set title comes from that document name, and the served/received date comes from that document's date.</div></div>
           <div class="hint">This page reads text from the selected case document, then sends it to your Supabase Edge Function <b>extract-discovery</b>. Scanned PDFs still require OCR before the text can be extracted.</div>
-          <button id="discoveryExtractBtn" type="button" class="btnPrimary">Extract selected document for review</button>
+          <button id="discoveryExtractBtn" type="button" class="btnPrimary">Extract selected document for review</button><button id="discoveryAddFileBtn" type="button" class="btnGhost">Add Discovery File</button>
           <div id="discoveryExtractStatus" class="hint"></div>
         </div>
         <div class="discoveryReviewCard">
@@ -1835,6 +1844,29 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_KEY, {
         <div><div class="label">Description</div><textarea id="discoveryDocModalDesc" placeholder="Describe the document or what request it responds to"></textarea></div>
         <div class="hint">This creates a normal document on the Documents page, tags it under Client Discovery Responses, and attaches it to this request.</div>
         <div class="discoveryModalActions"><button type="button" id="discoveryDocModalSave" class="btnPrimary">Upload and attach</button></div>
+      </div>
+    </div>
+    <div id="discoveryAddFileModal" class="discoveryModal">
+      <div class="discoveryModalCard">
+        <div style="display:flex;justify-content:space-between;gap:10px;align-items:center"><h3 style="margin:0">Add Discovery File</h3><button type="button" id="discoveryAddFileClose" class="btnGhost">Close</button></div>
+        <div class="hint">Upload the discovery request here. It will be saved as a case document and then sent to the discovery extraction API.</div>
+        <div><div class="label">Discovery type</div><select id="discoveryAddFileType"><option value="interrogatories">Interrogatories</option><option value="disclosures">Request for Disclosure</option><option value="production">Request for Production</option><option value="admissions">Request for Admissions</option></select></div>
+        <div><div class="label">Client response due</div><input id="discoveryAddFileDue" type="date" /></div>
+        <div><div class="label">File</div><input id="discoveryAddFileInput" type="file" /></div>
+        <div><div class="label">Document name</div><input id="discoveryAddFileName" type="text" placeholder="Document name" /></div>
+        <div><div class="label">Date served/received</div><input id="discoveryAddFileDate" type="date" /></div>
+        <div><div class="label">Description</div><textarea id="discoveryAddFileDesc" placeholder="What is this discovery document?"></textarea></div>
+        <div class="discoveryModalActions"><button type="button" id="discoveryAddFileSave" class="btnPrimary">Save document and extract</button></div>
+      </div>
+    </div>
+    <div id="discoveryInstructionsModal" class="discoveryModal">
+      <div class="discoveryModalCard" style="width:min(980px,calc(100vw - 34px))">
+        <div style="display:flex;justify-content:space-between;gap:10px;align-items:center"><h3 style="margin:0">Discovery Instructions</h3><button type="button" id="discoveryInstructionsClose" class="btnGhost">Close</button></div>
+        <div><div class="label">Discovery type</div><select id="discoveryInstructionsType"><option value="interrogatories">Interrogatories</option><option value="production">Request for Production</option><option value="disclosures">Request for Disclosure</option><option value="admissions">Request for Admissions</option></select></div>
+        <div class="discoveryInstructionToolbar"><button type="button" class="mini" data-discovery-instruction-cmd="bold"><b>B</b></button><button type="button" class="mini" data-discovery-instruction-cmd="italic"><i>I</i></button><button type="button" class="mini" data-discovery-instruction-cmd="underline"><u>U</u></button><button type="button" class="mini" data-discovery-instruction-cmd="insertOrderedList">1. List</button><button type="button" class="mini" data-discovery-instruction-cmd="insertUnorderedList">• List</button><button type="button" class="mini" data-discovery-instruction-cmd="indent">Indent</button><button type="button" class="mini" data-discovery-instruction-cmd="outdent">Outdent</button><button type="button" class="mini" id="discoveryInstructionUploadBtn">Upload file/link</button><input id="discoveryInstructionUploadFile" type="file" style="display:none" /></div>
+        <div id="discoveryInstructionsEditor" class="discoveryInstructionEditor" contenteditable="true" data-placeholder="Write the instructions the client should see for this discovery type. You can paste images here."></div>
+        <div class="hint">These instructions are automatically added when that discovery type is selected or uploaded.</div>
+        <div class="discoveryModalActions"><button type="button" id="discoveryInstructionsSave" class="btnPrimary">Save instructions</button></div>
       </div>
     </div>
 
@@ -11581,10 +11613,11 @@ const endpoint = `${SUPABASE_URL}/functions/v1/finalize-exhibit-packet`;
   };
   const DISCOVERY_TYPE_ABBR = { interrogatories:'Roggs', disclosures:'RFD', production:'RFP', admissions:'RFA' };
   const DISCOVERY_RFP_OPTIONS = [
-    'Will produce responsive documents',
-    'No responsive documents in my possession',
-    'I am not sure / need attorney help',
-    'Documents already produced or uploaded'
+    'No items have been identified - after a diligent search - that are responsive to the request.',
+    'The requested items are being served on the requesting party in this response',
+    'The requested items were attached to a prior response',
+    'The documents exist but I’m not producing them - I’ll specify in the comment why',
+    'I am not sure / need attorney help'
   ];
   let discoveryState = { sets: [], requests: [], responses: [], files: [], selectedSetId: '', mode: 'attorney', loaded: false, supabaseOk: true };
   let discoveryUploadModalRequestId = '';
@@ -11634,6 +11667,30 @@ const endpoint = `${SUPABASE_URL}/functions/v1/finalize-exhibit-packet`;
   function discoveryTypeInstructionKey(type){ return `murski_discovery_instructions_${getCaseId() || 'global'}_${normalizeDiscoveryType(type)}`; }
   function getDiscoveryTypeInstruction(type){ try{ return localStorage.getItem(discoveryTypeInstructionKey(type)) || ''; }catch(e){ return ''; } }
   function setDiscoveryTypeInstruction(type, value){ try{ localStorage.setItem(discoveryTypeInstructionKey(type), String(value || '')); }catch(e){} }
+  function discoveryNeedHelpKey(requestId){ return `murski_discovery_need_help_${getCaseId() || 'global'}_${requestId}`; }
+  function getDiscoveryNeedHelp(requestId){ try{ return localStorage.getItem(discoveryNeedHelpKey(requestId)) === '1'; }catch(e){ return false; } }
+  function setDiscoveryNeedHelp(requestId, value){ try{ localStorage.setItem(discoveryNeedHelpKey(requestId), value ? '1' : '0'); }catch(e){} saveDiscoveryLocal(); renderDiscovery(); }
+  function discoveryDaysUntil(dateValue){
+    const raw = String(dateValue || '').slice(0,10);
+    if(!raw) return null;
+    const due = new Date(raw + 'T00:00:00');
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    if(Number.isNaN(due.getTime())) return null;
+    return Math.ceil((due - today) / 86400000);
+  }
+  function renderDiscoveryDueCell(set){
+    const days = discoveryDaysUntil(set?.client_due_date || '');
+    const dateText = escapeHtml(formatDateForDisplay(set?.client_due_date || '') || set?.client_due_date || '');
+    if(days === null) return dateText;
+    return `<div class="discoveryDueDays"><div class="discoveryDueDaysNumber">${escapeHtml(String(days))}</div><div class="discoveryDueDaysLabel">days until response due</div><div class="hint">${dateText}</div></div>`;
+  }
+  function discoveryInstructionHtmlFor(type){ return getDiscoveryTypeInstruction(type) || ''; }
+  function setDiscoveryInstructionEditorHtml(html){ const ed = $('discoveryInstructionsEditor'); if(ed) ed.innerHTML = html || ''; }
+  function openDiscoveryInstructionsModal(){ const modal=$('discoveryInstructionsModal'); const sel=$('discoveryInstructionsType'); if(sel) sel.value = normalizeDiscoveryType($('discoveryUploadType')?.value || getSelectedDiscoverySet()?.discovery_type || 'interrogatories'); setDiscoveryInstructionEditorHtml(getDiscoveryTypeInstruction(sel?.value || 'interrogatories')); modal?.classList.add('open'); }
+  function closeDiscoveryInstructionsModal(){ $('discoveryInstructionsModal')?.classList.remove('open'); }
+  function saveDiscoveryInstructionsModal(){ const type = normalizeDiscoveryType($('discoveryInstructionsType')?.value || 'interrogatories'); const html = $('discoveryInstructionsEditor')?.innerHTML || ''; setDiscoveryTypeInstruction(type, html); const set = getSelectedDiscoverySet(); if(set && normalizeDiscoveryType(set.discovery_type) === type && !String(set.client_instructions || '').trim()) updateDiscoverySet(set.id, { client_instructions: html }); closeDiscoveryInstructionsModal(); renderDiscovery(); }
+  function execDiscoveryInstructionCommand(cmd){ const ed=$('discoveryInstructionsEditor'); if(ed) ed.focus(); try{ document.execCommand(cmd, false, null); }catch(e){} }
   function discoveryCompletionCounts(set){
     const reqs = discoveryRequestsForSet(set?.id || '', true);
     const required = reqs.filter(discoveryRequestRequiresResponse);
@@ -11967,8 +12024,8 @@ const endpoint = `${SUPABASE_URL}/functions/v1/finalize-exhibit-packet`;
     host.innerHTML = '<div style="overflow:auto"><table class="discoverySummaryTable"><thead><tr><th>Date Received</th><th>Client Response Due</th><th>Request for Disclosures</th><th>Request for Production</th><th>Interrogatories</th><th>Request for Admissions</th></tr></thead><tbody>' + sets.map(set => {
       const selected = set.id === discoveryState.selectedSetId;
       const counts = discoveryCompletionCounts(set);
-      const cells = types.map(t => normalizeDiscoveryType(set.discovery_type) === t ? `<td class="center"><div class="discoveryCellStack"><button type="button" class="discoverySetNameBtn" data-discovery-open-set="${escapeHtml(set.id)}" data-discovery-open-mode="client" title="${escapeHtml(set.title || '')}">${escapeHtml(set.title || getDiscoveryLabel(set.discovery_type))}</button><div class="hint">${counts.complete} out of ${counts.total} questions responded to</div><div class="discoveryResponsesMenu"><button type="button" class="discoveryResponsesMenuBtn">Responses ▾</button><div class="discoveryResponsesMenuPanel"><button type="button" data-discovery-download-notes="${escapeHtml(set.id)}">Download responses with Notes to attorney</button><button type="button" data-discovery-download-no-notes="${escapeHtml(set.id)}">Download responses without attorney notes</button><button type="button" data-discovery-uploaded-docs="${escapeHtml(set.id)}">Uploaded documents</button></div></div></div></td>` : '<td></td>').join('');
-      return `<tr style="${selected ? 'background:#f8fbff' : ''}"><td>${escapeHtml(formatDateForDisplay(set.date_received || '') || set.date_received || '')}</td><td>${escapeHtml(formatDateForDisplay(set.client_due_date || '') || set.client_due_date || '')}</td>${cells}</tr>`;
+      const cells = types.map(t => normalizeDiscoveryType(set.discovery_type) === t ? `<td class="center"><div class="discoveryCellStack"><button type="button" class="discoverySetNameBtn" data-discovery-open-set="${escapeHtml(set.id)}" data-discovery-open-mode="client" title="${escapeHtml(set.title || '')}">Click here to Respond to Discovery</button><div class="hint">${counts.complete} out of ${counts.total} questions responded to</div><div class="discoveryResponsesMenu"><button type="button" class="discoveryResponsesMenuBtn">Responses ▾</button><div class="discoveryResponsesMenuPanel"><button type="button" data-discovery-download-notes="${escapeHtml(set.id)}">Download responses with Notes to attorney</button><button type="button" data-discovery-download-no-notes="${escapeHtml(set.id)}">Download responses without attorney notes</button><button type="button" data-discovery-uploaded-docs="${escapeHtml(set.id)}">Uploaded documents</button></div></div></div></td>` : '<td></td>').join('');
+      return `<tr style="${selected ? 'background:#f8fbff' : ''}"><td>${escapeHtml(formatDateForDisplay(set.date_received || '') || set.date_received || '')}</td><td>${renderDiscoveryDueCell(set)}</td>${cells}</tr>`;
     }).join('') + '</tbody></table></div>';
     host.querySelectorAll('[data-discovery-open-set]').forEach(btn => btn.addEventListener('click', ()=> selectDiscoverySet(btn.getAttribute('data-discovery-open-set'), btn.getAttribute('data-discovery-open-mode') || 'client')));
     host.querySelectorAll('[data-discovery-download-notes]').forEach(btn => btn.addEventListener('click', (e)=>{ e.preventDefault(); e.stopPropagation(); downloadDiscoveryWordForSet(btn.getAttribute('data-discovery-download-notes'), true); }));
@@ -11976,25 +12033,19 @@ const endpoint = `${SUPABASE_URL}/functions/v1/finalize-exhibit-packet`;
     host.querySelectorAll('[data-discovery-uploaded-docs]').forEach(btn => btn.addEventListener('click', (e)=>{ e.preventDefault(); e.stopPropagation(); openDiscoveryUploadedDocsWindow(btn.getAttribute('data-discovery-uploaded-docs')); }));
   }
 
-
   function renderDiscoveryAttorneyList(){
     const host = $('discoveryAttorneyList'); if(!host) return;
     const set = getSelectedDiscoverySet();
     $('discoverySelectedSetPill') && ($('discoverySelectedSetPill').textContent = set ? `${getDiscoveryLabel(set.discovery_type)}: ${set.title || 'Untitled'}` : 'No set selected');
     if(!set){ host.innerHTML = '<div class="empty">Upload or select a discovery set first.</div>'; return; }
     const reqs = discoveryRequestsForSet(set.id, true);
-    const types = ['interrogatories','production','disclosures','admissions'];
-    const typeInstructionBox = `<div class="discoveryInstructionsBox"><div class="label">Default client instructions by discovery type</div><div class="hint">Write the instructions you want the client to see for each discovery type. The current set uses the ${escapeHtml(getDiscoveryLabel(set.discovery_type))} instructions at the top of the client response page.</div><div class="discoveryTypeInstructionGrid">${types.map(t => `<div><div class="label">${escapeHtml(getDiscoveryLabel(t))}</div><textarea data-discovery-type-instruction="${escapeHtml(t)}" placeholder="Instructions for ${escapeHtml(getDiscoveryLabel(t))}">${escapeHtml(getDiscoveryTypeInstruction(t))}</textarea></div>`).join('')}</div><button type="button" class="btnGhost" data-discovery-apply-type-instructions="${escapeHtml(set.id)}">Apply selected type instructions to this discovery set</button></div>`;
-    const instructionBox = `<div class="discoveryInstructionsBox"><div class="label">Client instructions for this discovery set</div><textarea data-discovery-set-instructions="${escapeHtml(set.id)}" placeholder="Example: Answer each question as completely as you can. If you do not know, say you do not know. Upload any documents that relate to a request.">${escapeHtml(set.client_instructions || getDiscoveryTypeInstruction(set.discovery_type) || '')}</textarea><div class="hint">These instructions appear at the top of the client response page before request #1.</div></div>`;
-    host.innerHTML = typeInstructionBox + instructionBox + (reqs.length ? reqs.map(req => `<div class="discoveryRequestRow ${req.send_to_client === false ? 'hiddenFromClient' : ''}"><div class="discoveryRequestTop"><label class="checkItem" style="margin:0"><input type="checkbox" data-discovery-send-toggle="${escapeHtml(req.id)}" ${req.send_to_client !== false ? 'checked' : ''}/> <span>Client must respond / count toward completion</span></label><span class="discoveryStatusPill">${escapeHtml(getDiscoveryLabel(req.request_type))} ${escapeHtml(req.request_number || '')}</span></div><div class="label">Request text</div><textarea data-discovery-request-text="${escapeHtml(req.id)}">${escapeHtml(req.request_text || '')}</textarea><div class="label">Attorney comments to client</div><textarea data-discovery-attorney-notes="${escapeHtml(req.id)}" placeholder="Client will see this under Attorney's Comments. Leave blank to show None.">${escapeHtml(req.attorney_notes || '')}</textarea></div>`).join('') : '<div class="empty">No requests were extracted.</div>');
-    host.querySelectorAll('[data-discovery-type-instruction]').forEach(input => input.addEventListener('blur', () => setDiscoveryTypeInstruction(input.getAttribute('data-discovery-type-instruction'), input.value || '')));
-    host.querySelectorAll('[data-discovery-apply-type-instructions]').forEach(btn => btn.addEventListener('click', () => { const next = getDiscoveryTypeInstruction(set.discovery_type); updateDiscoverySet(btn.getAttribute('data-discovery-apply-type-instructions'), { client_instructions: next || '' }); }));
-    host.querySelectorAll('[data-discovery-set-instructions]').forEach(input => input.addEventListener('blur', () => updateDiscoverySet(input.getAttribute('data-discovery-set-instructions'), { client_instructions: input.value || '' })));
+    const instructionNotice = `<div class="discoveryInstructionsBox"><div class="label">Client instructions</div><div class="hint">Instructions for ${escapeHtml(getDiscoveryLabel(set.discovery_type))} are managed from the Discovery Instructions link and are automatically applied to this discovery set.</div><button type="button" class="btnGhost" data-discovery-open-instructions>Discovery Instructions</button></div>`;
+    host.innerHTML = instructionNotice + (reqs.length ? reqs.map(req => `<div class="discoveryRequestRow ${req.send_to_client === false ? 'hiddenFromClient' : ''}"><div class="discoveryRequestTop"><label class="checkItem" style="margin:0"><input type="checkbox" data-discovery-send-toggle="${escapeHtml(req.id)}" ${req.send_to_client !== false ? 'checked' : ''}/> <span>Client must respond / count toward completion</span></label><span class="discoveryStatusPill">${escapeHtml(getDiscoveryLabel(req.request_type))} ${escapeHtml(req.request_number || '')}</span></div><div class="label">Request text</div><textarea data-discovery-request-text="${escapeHtml(req.id)}">${escapeHtml(req.request_text || '')}</textarea><div class="label">Attorney comments to client</div><textarea class="discoveryAttorneyCommentBox" data-discovery-attorney-notes="${escapeHtml(req.id)}" placeholder="Client will see this under Attorney's Comments. Leave blank to show None.">${escapeHtml(req.attorney_notes || '')}</textarea></div>`).join('') : '<div class="empty">No requests were extracted.</div>');
+    host.querySelectorAll('[data-discovery-open-instructions]').forEach(btn => btn.addEventListener('click', openDiscoveryInstructionsModal));
     host.querySelectorAll('[data-discovery-send-toggle]').forEach(input => input.addEventListener('change', e => updateDiscoveryRequest(input.getAttribute('data-discovery-send-toggle'), { send_to_client: !!e.target.checked })));
     host.querySelectorAll('[data-discovery-request-text]').forEach(input => input.addEventListener('blur', () => updateDiscoveryRequest(input.getAttribute('data-discovery-request-text'), { request_text: input.value || '' })));
     host.querySelectorAll('[data-discovery-attorney-notes]').forEach(input => input.addEventListener('blur', () => updateDiscoveryRequest(input.getAttribute('data-discovery-attorney-notes'), { attorney_notes: input.value || '' })));
   }
-
 
   function renderDiscoveryClientList(){
     const host = $('discoveryClientList'); if(!host) return;
@@ -12002,8 +12053,8 @@ const endpoint = `${SUPABASE_URL}/functions/v1/finalize-exhibit-packet`;
     $('discoveryClientSelectedPill') && ($('discoveryClientSelectedPill').textContent = set ? `${getDiscoveryLabel(set.discovery_type)}: ${set.title || 'Untitled'}` : 'No set selected');
     if(!set){ host.innerHTML = '<div class="empty">No discovery set selected.</div>'; return; }
     const reqs = discoveryRequestsForSet(set.id, true);
-    const instructions = String(set.client_instructions || '').trim();
-    const topInstructions = `<div class="discoveryInstructionsBox"><div class="label">Attorney instructions</div><div class="discoveryReqText">${instructions ? escapeHtml(instructions) : 'None'}</div></div>`;
+    const instructions = String(set.client_instructions || discoveryInstructionHtmlFor(set.discovery_type) || '').trim();
+    const topInstructions = `<div class="discoveryInstructionsBox"><div class="label">Attorney instructions</div><div class="discoveryReqText">${instructions || 'None'}</div></div>`;
     host.innerHTML = topInstructions + (reqs.length ? reqs.map(req => {
       const resp = getDiscoveryResponse(req.id);
       const isRfp = normalizeDiscoveryType(req.request_type) === 'production';
@@ -12011,14 +12062,16 @@ const endpoint = `${SUPABASE_URL}/functions/v1/finalize-exhibit-packet`;
       const required = discoveryRequestRequiresResponse(req);
       const attyNotes = String(req.attorney_notes || '').trim();
       const noAnswerNotice = !required ? '<div class="setupBox">Your attorney has marked this request as not requiring a client response. Review the request and attorney comments, but you do not need to answer it unless your attorney asks you to.</div>' : '';
-      const rfpAlreadyUploaded = resp.rfp_status === 'Documents already produced or uploaded';
-      return `<div class="discoveryRequestRow ${!required ? 'discoveryNoAnswerNeeded' : ''}"><div class="discoveryRequestTop"><div class="discoveryReqNumber">${escapeHtml(getDiscoveryLabel(req.request_type))} ${escapeHtml(req.request_number || '')}</div><span class="hint">${required ? 'Response required' : 'No response required'} • Files: ${files.length}</span></div><div class="discoveryReqText">${escapeHtml(req.request_text || '')}</div><div class="discoveryInstructionsBox"><div class="label">Attorney's Comments:</div><div class="discoveryReqText">${attyNotes ? escapeHtml(attyNotes) : 'None'}</div></div>${noAnswerNotice}${isRfp ? `<div><div class="label">Response</div><select data-discovery-rfp-status="${escapeHtml(req.id)}" ${!required ? 'disabled' : ''}><option value="">Choose response...</option>${DISCOVERY_RFP_OPTIONS.map(opt => `<option value="${escapeHtml(opt)}" ${resp.rfp_status === opt ? 'selected' : ''}>${escapeHtml(opt)}</option>`).join('')}</select></div>${rfpAlreadyUploaded ? `<div><div class="label">Which request(s) were the documents uploaded to?</div><textarea data-discovery-rfp-upload-notes="${escapeHtml(req.id)}" placeholder="Example: Uploaded under RFP 4 and RFP 7, or document names/locations.">${escapeHtml(resp.rfp_upload_notes || '')}</textarea></div>` : ''}` : `<div><div class="label">Your answer</div><textarea data-discovery-client-response="${escapeHtml(req.id)}" placeholder="Type your answer here" ${!required ? 'disabled' : ''}>${escapeHtml(resp.client_response || '')}</textarea></div>`}<div><div class="label">Questions / comments to your attorney</div><textarea data-discovery-client-comments="${escapeHtml(req.id)}" placeholder="Ask your attorney a question or explain anything you are unsure about">${escapeHtml(resp.client_comments || '')}</textarea></div><div><div class="label">Upload files for this request</div><button type="button" class="btnPrimary discoveryUploadButton" data-discovery-open-upload="${escapeHtml(req.id)}">Upload document</button></div><div class="discoveryFileList">${files.length ? files.map(f => `<div class="discoveryFilePill"><span>${escapeHtml(f.file_name || 'File')}</span>${f.file_path ? `<a target="_blank" rel="noopener" href="${escapeHtml(getDocumentPublicUrl(f.file_path))}">Open</a>` : '<span class="hint">local only</span>'}</div>`).join('') : '<div class="hint">No files uploaded for this request yet.</div>'}</div></div>`;
+      const needsHelp = getDiscoveryNeedHelp(req.id);
+      const rfpNeedsPrior = resp.rfp_status === 'The requested items were attached to a prior response';
+      return `<div class="discoveryRequestRow ${!required ? 'discoveryNoAnswerNeeded' : ''} ${needsHelp ? 'discoveryNeedsHelp' : ''}"><div class="discoveryRequestTop"><div class="discoveryReqNumber">${escapeHtml(getDiscoveryLabel(req.request_type))} ${escapeHtml(req.request_number || '')}</div><span class="hint">${required ? 'Response required' : 'No response required'} • Files: ${files.length}</span></div><div class="discoveryReqText">${escapeHtml(req.request_text || '')}</div><div class="discoveryInstructionsBox discoveryAttorneyCommentBox"><div class="label">Attorney's Comments:</div><div class="discoveryReqText">${attyNotes ? escapeHtml(attyNotes) : 'None'}</div></div>${noAnswerNotice}${isRfp ? `<div><div class="label">Response</div><select data-discovery-rfp-status="${escapeHtml(req.id)}" ${!required ? 'disabled' : ''}><option value="">Choose response...</option>${DISCOVERY_RFP_OPTIONS.map(opt => `<option value="${escapeHtml(opt)}" ${resp.rfp_status === opt ? 'selected' : ''}>${escapeHtml(opt)}</option>`).join('')}</select></div>${rfpNeedsPrior ? `<div><div class="label">Which prior response were the requested items attached to?</div><textarea data-discovery-rfp-upload-notes="${escapeHtml(req.id)}" placeholder="Example: Attached to prior RFP response served on 05/01/2026, Request No. 4.">${escapeHtml(resp.rfp_upload_notes || '')}</textarea></div>` : ''}` : `<div><div class="label">Your answer</div><textarea data-discovery-client-response="${escapeHtml(req.id)}" placeholder="Type your answer here" ${!required ? 'disabled' : ''}>${escapeHtml(resp.client_response || '')}</textarea></div>`}<div><div class="label">Questions / comments to your attorney</div><textarea data-discovery-client-comments="${escapeHtml(req.id)}" placeholder="Ask your attorney a question or explain anything you are unsure about">${escapeHtml(resp.client_comments || '')}</textarea></div><div class="row"><button type="button" class="${needsHelp ? 'btnDanger' : 'btnGhost'}" data-discovery-need-help="${escapeHtml(req.id)}">Need Help</button></div><div><div class="label">Upload files for this request</div><button type="button" class="btnPrimary discoveryUploadButton" data-discovery-open-upload="${escapeHtml(req.id)}">Upload document</button></div><div class="discoveryFileList">${files.length ? files.map(f => `<div class="discoveryFilePill"><span>${escapeHtml(f.file_name || 'File')}</span>${f.file_path ? `<a target="_blank" rel="noopener" href="${escapeHtml(getDocumentPublicUrl(f.file_path))}">Open</a>` : '<span class="hint">local only</span>'}</div>`).join('') : '<div class="hint">No files uploaded for this request yet.</div>'}</div></div>`;
     }).join('') : '<div class="empty">There are no requests in this discovery set.</div>');
     host.querySelectorAll('[data-discovery-client-response]').forEach(el => el.addEventListener('blur', () => updateDiscoveryResponse(el.getAttribute('data-discovery-client-response'), { client_response:el.value || '' })));
     host.querySelectorAll('[data-discovery-client-comments]').forEach(el => el.addEventListener('blur', () => updateDiscoveryResponse(el.getAttribute('data-discovery-client-comments'), { client_comments:el.value || '' })));
-    host.querySelectorAll('[data-discovery-rfp-status]').forEach(el => el.addEventListener('change', () => updateDiscoveryResponse(el.getAttribute('data-discovery-rfp-status'), { rfp_status:el.value || '' })));
+    host.querySelectorAll('[data-discovery-rfp-status]').forEach(el => el.addEventListener('change', () => updateDiscoveryResponse(el.getAttribute('data-discovery-rfp-status'), { rfp_status:el.value || '' }).then(()=>renderDiscovery())));
     host.querySelectorAll('[data-discovery-rfp-upload-notes]').forEach(el => el.addEventListener('blur', () => updateDiscoveryResponse(el.getAttribute('data-discovery-rfp-upload-notes'), { rfp_upload_notes:el.value || '' })));
     host.querySelectorAll('[data-discovery-open-upload]').forEach(btn => btn.addEventListener('click', () => openDiscoveryDocumentModal(btn.getAttribute('data-discovery-open-upload'))));
+    host.querySelectorAll('[data-discovery-need-help]').forEach(btn => btn.addEventListener('click', () => setDiscoveryNeedHelp(btn.getAttribute('data-discovery-need-help'), !getDiscoveryNeedHelp(btn.getAttribute('data-discovery-need-help')))));
   }
 
   function renderDiscoveryCompletion(){
@@ -12160,6 +12213,70 @@ const endpoint = `${SUPABASE_URL}/functions/v1/finalize-exhibit-packet`;
   }
   window.renderDiscovery = renderDiscovery;
 
+
+  function openDiscoveryAddFileModal(){
+    ensureDiscoveryDueDefault();
+    const modal=$('discoveryAddFileModal');
+    if($('discoveryAddFileType')) $('discoveryAddFileType').value = normalizeDiscoveryType($('discoveryUploadType')?.value || 'interrogatories');
+    if($('discoveryAddFileDue')) $('discoveryAddFileDue').value = $('discoveryClientDue')?.value || discoveryIsoPlusDays(14);
+    if($('discoveryAddFileDate')) $('discoveryAddFileDate').value = discoveryTodayIso();
+    ['discoveryAddFileInput','discoveryAddFileName','discoveryAddFileDesc'].forEach(id => { const el=$(id); if(el) el.value=''; });
+    modal?.classList.add('open');
+  }
+  function closeDiscoveryAddFileModal(){ $('discoveryAddFileModal')?.classList.remove('open'); }
+  async function saveDiscoveryAddFileAndExtract(){
+    const file = $('discoveryAddFileInput')?.files?.[0];
+    const type = normalizeDiscoveryType($('discoveryAddFileType')?.value || 'interrogatories');
+    const clientDue = $('discoveryAddFileDue')?.value || discoveryIsoPlusDays(14);
+    const docName = ($('discoveryAddFileName')?.value || file?.name || getDiscoveryLabel(type)).trim();
+    const docDate = $('discoveryAddFileDate')?.value || discoveryTodayIso();
+    const desc = $('discoveryAddFileDesc')?.value || '';
+    if(!file){ alert('Choose a discovery file first.'); return; }
+    if(!docName){ alert('Document name is required.'); return; }
+    setDiscoveryStatus('Saving discovery document...');
+    try{
+      let created = null;
+      if(window.createDocument){
+        created = await window.createDocument({ name:docName, docDate, description:desc, status:'neither' });
+        if(!created) throw new Error('Could not create document row.');
+        const path = await window.uploadDocumentFile(created.id, file);
+        if(!path) throw new Error('Document row created, but file upload failed.');
+        created = await window.updateDocumentRow(created.id, { file_path:path, original_file_name:file.name || '', mime_type:file.type || '', file_size:Number(file.size || 0) || 0, description:desc, doc_date:docDate }) || created;
+        if(window.loadDocuments) await window.loadDocuments();
+      } else throw new Error('Document creation is not available.');
+      closeDiscoveryAddFileModal();
+      if($('discoveryUploadType')) $('discoveryUploadType').value = type;
+      if($('discoveryClientDue')) $('discoveryClientDue').value = clientDue;
+      populateDiscoverySourceDocumentSelect();
+      if($('discoverySourceDocumentSelect')) $('discoverySourceDocumentSelect').value = created.id;
+      const rawText = await readDiscoveryFileText(file);
+      if(!rawText.trim()) throw new Error('No text could be extracted from this file. If it is a scanned PDF, run OCR first or add OCR to the Edge Function.');
+      setDiscoveryStatus('Sending text to discovery extraction API...');
+      const requests = await callDiscoveryExtractionApi(rawText, type, file.name || docName);
+      const set = await saveDiscoverySetAndRequests({ title:docName, discovery_type:type, date_received:docDate, client_due_date:clientDue, source_document_id:created.id, source_file_path:getAnyDocumentFilePath(created), source_file_name:getAnyDocumentOriginalFileName(created) || file.name || docName, extraction_status:'review', client_instructions: discoveryInstructionHtmlFor(type) || '' }, requests, created);
+      setDiscoveryStatus(`Extracted ${requests.length} request(s). Review them before sending to the client.`);
+      discoveryState.mode = 'attorney'; discoveryState.selectedSetId = set.id; discoveryState.loaded = true; saveDiscoveryLocal(); renderDiscovery();
+    }catch(error){ console.error('Add Discovery File failed', error); setDiscoveryStatus('Add Discovery File failed: ' + (error?.message || error)); alert('Add Discovery File failed: ' + (error?.message || error)); }
+  }
+  async function uploadDiscoveryInstructionFile(){
+    const file = $('discoveryInstructionUploadFile')?.files?.[0];
+    if(!file) return;
+    const type = normalizeDiscoveryType($('discoveryInstructionsType')?.value || 'interrogatories');
+    try{
+      let url = '';
+      if(window.createDocument){
+        const doc = await window.createDocument({ name:file.name || 'Discovery instruction attachment', docDate:discoveryTodayIso(), description:`Discovery instruction attachment for ${getDiscoveryLabel(type)}`, status:'neither' });
+        if(doc){
+          const path = await window.uploadDocumentFile(doc.id, file);
+          if(path){ await window.updateDocumentRow(doc.id, { file_path:path, original_file_name:file.name || '', mime_type:file.type || '', file_size:Number(file.size || 0) || 0 }); url = window.getDocumentPublicUrl ? window.getDocumentPublicUrl(path) : ''; }
+        }
+      }
+      if(!url) throw new Error('Could not upload instruction file.');
+      const ed=$('discoveryInstructionsEditor'); if(ed){ ed.focus(); document.execCommand('insertHTML', false, `<a href="${url}" target="_blank" rel="noopener">${escapeHtml(file.name || 'Instruction attachment')}</a>`); }
+    }catch(error){ alert(error?.message || String(error)); }
+    if($('discoveryInstructionUploadFile')) $('discoveryInstructionUploadFile').value = '';
+  }
+
   async function handleDiscoveryExtract(){
     const sourceDocId = $('discoverySourceDocumentSelect')?.value || '';
     const sourceDoc = getDiscoverySourceDocumentById(sourceDocId);
@@ -12185,7 +12302,7 @@ const endpoint = `${SUPABASE_URL}/functions/v1/finalize-exhibit-packet`;
         source_file_path:getAnyDocumentFilePath(sourceDoc),
         source_file_name:getAnyDocumentOriginalFileName(sourceDoc) || title,
         extraction_status:'review',
-        client_instructions:''
+        client_instructions: discoveryInstructionHtmlFor(type) || ''
       }, requests, sourceDoc);
       setDiscoveryStatus(`Extracted ${requests.length} request(s). Review them before sending to the client. Title: ${title}. Served/received date used: ${formatDateForDisplay(dateReceived) || dateReceived}.`);
       discoveryState.mode = 'attorney'; discoveryState.selectedSetId = set.id; discoveryState.loaded = true; saveDiscoveryLocal(); renderDiscovery();
@@ -12201,6 +12318,17 @@ const endpoint = `${SUPABASE_URL}/functions/v1/finalize-exhibit-packet`;
 
 
   $('discoveryAttorneyModeBtn')?.addEventListener('click', ()=>{ discoveryState.mode='attorney'; saveDiscoveryLocal(); renderDiscovery(); });
+  $('discoveryInstructionsBtn')?.addEventListener('click', openDiscoveryInstructionsModal);
+  $('discoveryAddFileBtn')?.addEventListener('click', openDiscoveryAddFileModal);
+  $('discoveryAddFileClose')?.addEventListener('click', closeDiscoveryAddFileModal);
+  $('discoveryAddFileSave')?.addEventListener('click', saveDiscoveryAddFileAndExtract);
+  $('discoveryAddFileInput')?.addEventListener('change', () => { const file=$('discoveryAddFileInput')?.files?.[0]; if(file && $('discoveryAddFileName') && !$('discoveryAddFileName').value) $('discoveryAddFileName').value=file.name || ''; });
+  $('discoveryInstructionsClose')?.addEventListener('click', closeDiscoveryInstructionsModal);
+  $('discoveryInstructionsSave')?.addEventListener('click', saveDiscoveryInstructionsModal);
+  $('discoveryInstructionsType')?.addEventListener('change', () => setDiscoveryInstructionEditorHtml(getDiscoveryTypeInstruction($('discoveryInstructionsType')?.value || 'interrogatories')));
+  document.querySelectorAll('[data-discovery-instruction-cmd]').forEach(btn => btn.addEventListener('click', () => execDiscoveryInstructionCommand(btn.getAttribute('data-discovery-instruction-cmd'))));
+  $('discoveryInstructionUploadBtn')?.addEventListener('click', () => $('discoveryInstructionUploadFile')?.click());
+  $('discoveryInstructionUploadFile')?.addEventListener('change', uploadDiscoveryInstructionFile);
   $('discoveryClientModeBtn')?.addEventListener('click', ()=>{ discoveryState.mode='client'; saveDiscoveryLocal(); renderDiscovery(); });
   $('discoveryCompletionModeBtn')?.addEventListener('click', ()=>{ discoveryState.mode='completion'; saveDiscoveryLocal(); renderDiscovery(); });
   $('discoveryDownloadZipBtn')?.addEventListener('click', downloadDiscoveryFilesZip);
