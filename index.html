@@ -2281,6 +2281,7 @@ function normalizeState(){ state.tags = Array.isArray(state.tags) ? state.tags.f
       { key:'trialissues', label:'Trial Issues', views:['trialissues','cross','mattdirect','direct'] },
       { key:'reports', label:'Reports', views:['reports'] },
       { key:'documentanalysis', label:'Document Analysis', views:['documentanalysis'] },
+      { key:'discovery', label:'Discovery', views:['discovery'] },
       { key:'settings', label:'Add Tag', views:['settings','tagindex'] }
     ];
     function getAllCasePageKeys(){ return CASE_PAGE_ACCESS.map(p => p.key); }
@@ -2356,7 +2357,11 @@ function normalizeState(){ state.tags = Array.isArray(state.tags) ? state.tags.f
       }
       if(!window.supabase || !CASE_ID || !user?.id){ applyCaseRoleVisibility(); return; }
       try{
-        const memberRes = await window.supabase.from('case_members').select('case_id, role').eq('case_id', CASE_ID).eq('user_id', user.id).maybeSingle();
+        let memberRes = await window.supabase.from('case_members').select('case_id, role, page_access').eq('case_id', CASE_ID).eq('user_id', user.id).maybeSingle();
+        if(memberRes.error){
+          console.warn('case_members.page_access not available yet; using legacy membership load.', memberRes.error);
+          memberRes = await window.supabase.from('case_members').select('case_id, role').eq('case_id', CASE_ID).eq('user_id', user.id).maybeSingle();
+        }
         if(memberRes.error) throw memberRes.error;
         authUi.currentCaseMember = memberRes.data || null;
         authUi.currentCaseRole = memberRes.data?.role || 'user';
@@ -9162,7 +9167,13 @@ function openStructuredDocEditor(docId){
     async function loadCaseMembers(caseId){
       authUi.members = [];
       if(!caseId) return [];
-      const { data: memberRows, error } = await window.supabase.from('case_members').select('user_id, role').eq('case_id', caseId);
+      let memberQuery = await window.supabase.from('case_members').select('user_id, role, page_access').eq('case_id', caseId);
+      if(memberQuery.error){
+        console.warn('case_members.page_access column not available yet; page access will fall back to this browser only until the column is added.', memberQuery.error);
+        memberQuery = await window.supabase.from('case_members').select('user_id, role').eq('case_id', caseId);
+      }
+      const memberRows = memberQuery.data || [];
+      const error = memberQuery.error;
       if(error) throw error;
       const localAccessMap = loadCasePageAccessMap(caseId);
       (memberRows || []).forEach(row => {
@@ -9189,7 +9200,26 @@ function openStructuredDocEditor(docId){
           return `<div class="memberRow"><div><b>${escapeHtml(label || 'User')}</b><div class="authMuted">${escapeHtml(profile.email || row.user_id || '')}</div></div><div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><span class="pill">${escapeHtml(row.role || 'user')}</span>${accessControl}${canRemove ? `<button type="button" class="btnGhost" data-remove-member="${row.user_id}">Remove</button>` : ''}</div></div>`;
         }).join('') : '<div class="empty">No users on this case yet.</div>';
         list.querySelectorAll('[data-remove-member]').forEach(btn => btn.addEventListener('click', async ()=>{ try{ const userId = btn.getAttribute('data-remove-member'); if(!userId || !authUi.selectedCase) return; const { error: delError } = await window.supabase.from('case_members').delete().eq('case_id', authUi.selectedCase).eq('user_id', userId); if(delError) throw delError; await loadCaseMembers(authUi.selectedCase); toast('User removed from case'); }catch(e){ alert(e.message || e); } }));
-        list.querySelectorAll('[data-member-page-access]').forEach(sel => sel.addEventListener('change', async ()=>{ try{ const userId = sel.getAttribute('data-member-page-access'); const pageAccess = Array.from(sel.selectedOptions).map(opt => opt.value); if(!userId || !authUi.selectedCase) return; setStoredCasePageAccess(userId, pageAccess, authUi.selectedCase); const member = authUi.members.find(row => row.user_id === userId); if(member) member.page_access = pageAccess; toast('Page access updated'); }catch(e){ alert(e && e.message ? e.message : e); } }));
+        list.querySelectorAll('[data-member-page-access]').forEach(sel => sel.addEventListener('change', async ()=>{
+          try{
+            const userId = sel.getAttribute('data-member-page-access');
+            const pageAccess = Array.from(sel.selectedOptions).map(opt => opt.value);
+            if(!userId || !authUi.selectedCase) return;
+            const normalizedAccess = normalizeCasePageAccess(pageAccess);
+            setStoredCasePageAccess(userId, normalizedAccess, authUi.selectedCase);
+            const member = authUi.members.find(row => row.user_id === userId);
+            if(member) member.page_access = normalizedAccess;
+            let savedRemote = false;
+            try{
+              const { error: accessError } = await window.supabase.from('case_members').update({ page_access: normalizedAccess }).eq('case_id', authUi.selectedCase).eq('user_id', userId);
+              if(accessError) throw accessError;
+              savedRemote = true;
+            }catch(accessError){
+              console.warn('Could not save page access to Supabase. Add a jsonb page_access column to case_members.', accessError);
+            }
+            toast(savedRemote ? 'Page access updated in Supabase' : 'Page access updated locally. Add case_members.page_access to Supabase to sync it for all browsers.');
+          }catch(e){ alert(e && e.message ? e.message : e); }
+        }));
       }
       return authUi.members;
     }
@@ -9314,7 +9344,28 @@ function openStructuredDocEditor(docId){
       $('authSignUpBtn')?.addEventListener('click', async ()=>{ try{ const email = $('authSignupEmail').value.trim(); const password = $('authSignupPassword').value; const { error } = await window.supabase.auth.signUp({ email, password, options: { emailRedirectTo: window.location.origin + window.location.pathname } }); if(error) throw error; alert('Login created. The user can sign in after email confirmation if your Supabase project requires it.'); }catch(e){ alert(e.message || e); } });
       $('authResetPwBtn')?.addEventListener('click', async ()=>{ try{ const email = ($('authEmail').value || $('authSignupEmail').value || '').trim(); if(!email) throw new Error('Enter the email first.'); const { error } = await window.supabase.auth.resetPasswordForEmail(email, { redirectTo: window.location.origin + window.location.pathname + '?recovery=1' }); if(error) throw error; alert('Password reset email sent.'); }catch(e){ alert(e.message || e); } });
       $('dashboardCreateCaseBtn')?.addEventListener('click', async ()=>{ try{ if(!currentDashboardUserCanCreateCases()) throw new Error('Only admins can create new cases.'); const user = getActiveSessionUser(); if(!user) throw new Error('Sign in first.'); const name = $('dashboardCaseName').value.trim(); if(!name) throw new Error('Enter a case name.'); const { data: caseRow, error } = await window.supabase.from('cases').insert({ name, created_by: user.id }).select().single(); if(error) throw error; const memberRes = await window.supabase.from('case_members').insert({ case_id: caseRow.id, user_id: user.id, role: 'admin' }); if(memberRes.error) throw memberRes.error; $('dashboardCaseName').value = ''; await loadDashboardData(); toast('Case created'); }catch(e){ alert(e.message || e); } });
-      $('addMemberBtn')?.addEventListener('click', async ()=>{ try{ if(!authUi.selectedCase) throw new Error('Choose a case first.'); const email = $('memberEmail').value.trim().toLowerCase(); const role = $('memberRole').value || 'user'; if(!email) throw new Error('Enter the user email.'); const { data: profile, error: profileError } = await window.supabase.from('profiles').select('*').ilike('email', email).maybeSingle(); if(profileError) throw profileError; if(!profile || !profile.id) throw new Error('That email does not have a login/profile yet. Have them sign up first from the login box.'); const { error } = await window.supabase.from('case_members').upsert({ case_id: authUi.selectedCase, user_id: profile.id, role }, { onConflict:'case_id,user_id' }); if(error) throw error; $('memberEmail').value = ''; await loadCaseMembers(authUi.selectedCase); toast('User added to case'); }catch(e){ alert(e.message || e); } });
+      $('addMemberBtn')?.addEventListener('click', async ()=>{
+        try{
+          if(!authUi.selectedCase) throw new Error('Choose a case first.');
+          const email = $('memberEmail').value.trim().toLowerCase();
+          const role = $('memberRole').value || 'user';
+          if(!email) throw new Error('Enter the user email.');
+          const { data: profile, error: profileError } = await window.supabase.from('profiles').select('*').ilike('email', email).maybeSingle();
+          if(profileError) throw profileError;
+          if(!profile || !profile.id) throw new Error('That email does not have a login/profile yet. Have them sign up first from the login box.');
+          const defaultPageAccess = role === 'admin' ? getAllCasePageKeys() : ['discovery'];
+          let memberWrite = await window.supabase.from('case_members').upsert({ case_id: authUi.selectedCase, user_id: profile.id, role, page_access: defaultPageAccess }, { onConflict:'case_id,user_id' });
+          if(memberWrite.error){
+            console.warn('case_members.page_access column not available yet; adding member without synced page access.', memberWrite.error);
+            memberWrite = await window.supabase.from('case_members').upsert({ case_id: authUi.selectedCase, user_id: profile.id, role }, { onConflict:'case_id,user_id' });
+            if(memberWrite.error) throw memberWrite.error;
+            setStoredCasePageAccess(profile.id, defaultPageAccess, authUi.selectedCase);
+          }
+          $('memberEmail').value = '';
+          await loadCaseMembers(authUi.selectedCase);
+          toast(role === 'admin' ? 'Admin added to case' : 'User added to case with Discovery access by default');
+        }catch(e){ alert(e.message || e); }
+      });
       let sessionRes = null;
       try{
         sessionRes = await Promise.race([
@@ -11775,7 +11826,7 @@ const endpoint = `${SUPABASE_URL}/functions/v1/finalize-exhibit-packet`;
       discoveryState.supabaseOk = false;
       loadDiscoveryLocal();
       const warn = $('discoverySetupWarning');
-      if(warn){ warn.classList.remove('hidden'); warn.innerHTML = 'Discovery Supabase tables are not available yet, so this page is using local browser storage for testing. Add the tables listed below, then refresh.'; }
+      if(warn){ warn.classList.remove('hidden'); warn.innerHTML = 'Discovery Supabase tables are not available yet, so this page is using local browser storage for testing only. Client responses and uploads will save to Supabase once these tables exist: discovery_sets, discovery_requests, discovery_responses, and discovery_files.'; }
     }
   }
 
@@ -12385,6 +12436,7 @@ const endpoint = `${SUPABASE_URL}/functions/v1/finalize-exhibit-packet`;
     if(clientPane) clientPane.style.display = discoveryState.mode === 'client' ? 'grid' : 'none';
     if(completionPane) completionPane.style.display = discoveryState.mode === 'completion' ? 'grid' : 'none';
     if($('discoveryAttorneyModeBtn')){ $('discoveryAttorneyModeBtn').style.display = attorneyAllowed ? '' : 'none'; $('discoveryAttorneyModeBtn').className = discoveryState.mode === 'attorney' ? 'btnPrimary' : 'btnGhost'; }
+    if($('discoveryInstructionsBtn')) $('discoveryInstructionsBtn').style.display = attorneyAllowed ? '' : 'none';
     if($('discoveryClientModeBtn')) $('discoveryClientModeBtn').className = discoveryState.mode === 'client' || !attorneyAllowed ? 'btnPrimary' : 'btnGhost';
     if($('discoveryCompletionModeBtn')) $('discoveryCompletionModeBtn').className = discoveryState.mode === 'completion' ? 'btnPrimary' : 'btnGhost';
     ensureDiscoveryDueDefault(); populateDiscoverySourceDocumentSelect(); renderDiscoveryDashboard(); renderDiscoveryAttorneyList(); renderDiscoveryClientList(); renderDiscoveryCompletion();
