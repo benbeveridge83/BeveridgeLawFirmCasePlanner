@@ -11899,22 +11899,25 @@ const endpoint = `${SUPABASE_URL}/functions/v1/finalize-exhibit-packet`;
     renderDiscoveryClientList();
   }
   function setRapidDiscoverySort(setId, sort){
+    saveRapidDiscoveryScrollPosition(setId);
     discoveryState.rapidSortBySet = discoveryState.rapidSortBySet || {};
     discoveryState.rapidSortBySet[setId] = sort === 'oldest' ? 'oldest' : 'newest';
     saveDiscoveryLocal();
-    renderDiscoveryClientList();
+    renderRapidDiscoveryPreservingScroll(setId);
   }
   function setRapidDiscoveryFilter(setId, text){
+    saveRapidDiscoveryScrollPosition(setId);
     discoveryState.rapidFilterBySet = discoveryState.rapidFilterBySet || {};
     discoveryState.rapidFilterBySet[setId] = String(text || '');
     saveDiscoveryLocal();
-    renderDiscoveryClientList();
+    renderRapidDiscoveryPreservingScroll(setId);
   }
   function startRapidDiscoveryPick(setId){
     // Kept for compatibility with older saved pages. The Rapid worksheet now opens with all available matter documents already loaded.
     openRapidDiscoveryWorksheet(setId);
   }
   function resetRapidDiscoveryPick(setId){
+    saveRapidDiscoveryScrollPosition(setId);
     discoveryState.rapidSelectedDocIdsBySet = discoveryState.rapidSelectedDocIdsBySet || {};
     discoveryState.rapidSelectedDocIdsBySet[setId] = [];
     discoveryState.rapidRemovedDocIdsBySet = discoveryState.rapidRemovedDocIdsBySet || {};
@@ -11922,12 +11925,13 @@ const endpoint = `${SUPABASE_URL}/functions/v1/finalize-exhibit-packet`;
     discoveryState.rapidFilterBySet = discoveryState.rapidFilterBySet || {};
     discoveryState.rapidFilterBySet[setId] = '';
     saveDiscoveryLocal();
-    renderDiscoveryClientList();
+    renderRapidDiscoveryPreservingScroll(setId);
   }
   function selectRapidDiscoveryRows(setId, shouldSelect){
     document.querySelectorAll('[data-rapid-row-check]').forEach(box => { if(String(box.getAttribute('data-rapid-row-check')) === String(setId)) box.checked = !!shouldSelect; });
   }
   function removeRapidDiscoveryRows(setId){
+    saveRapidDiscoveryScrollPosition(setId);
     const picked = Array.from(document.querySelectorAll('[data-rapid-row-check]')).filter(i => String(i.getAttribute('data-rapid-row-check')) === String(setId) && i.checked).map(i => i.value).filter(Boolean);
     if(!picked.length){ alert('Select at least one visible row to remove.'); return; }
     discoveryState.rapidRemovedDocIdsBySet = discoveryState.rapidRemovedDocIdsBySet || {};
@@ -11935,7 +11939,7 @@ const endpoint = `${SUPABASE_URL}/functions/v1/finalize-exhibit-packet`;
     picked.forEach(id => current.add(String(id)));
     discoveryState.rapidRemovedDocIdsBySet[setId] = Array.from(current);
     saveDiscoveryLocal();
-    renderDiscoveryClientList();
+    renderRapidDiscoveryPreservingScroll(setId);
   }
   function getRapidDiscoveryTableWrapForSet(setId){
     const id = String(setId || '');
@@ -12107,14 +12111,21 @@ const endpoint = `${SUPABASE_URL}/functions/v1/finalize-exhibit-packet`;
     return `<div class="rapidDiscoveryFilterPanel"><div class="hint" style="margin-bottom:8px">Use the same inclusion and exclusion style as the Document Worksheet.</div><div class="elementsFilterGrid"><div><div class="label">Tags / subtags</div><div class="elementsFilterDual"><div><div class="label" style="margin-bottom:6px">Filter-inclusion</div><div class="elementsFilterChecklist"><label class="checkItem" style="margin:0"><input type="checkbox" data-rapid-tag-none-include ${ui.documentTableTagNoneSelected ? 'checked' : ''} /> <span>none selected</span></label></div>${tagIncludeTree}</div><div><div class="label" style="margin-bottom:6px">Filter exclusion</div><div class="elementsFilterChecklist"><label class="checkItem" style="margin:0"><input type="checkbox" data-rapid-tag-none-exclude ${ui.documentTableTagExcludeNoneSelected !== false ? 'checked' : ''} /> <span>none selected</span></label></div>${tagExcludeTree}</div></div></div><div><div class="label">Exhibit status</div>${rapidSimpleFilterMarkup(items.exhibitItems, ui.documentTableExhibitIds || [], ui.documentTableExhibitExcludeIds || [], !!ui.documentTableExhibitNoneSelected, ui.documentTableExhibitExcludeNoneSelected !== false, 'exhibit')}</div><div><div class="label">Timeline</div>${rapidSimpleFilterMarkup(items.timelineItems, ui.documentTableTimelineIds || [], ui.documentTableTimelineExcludeIds || [], !!ui.documentTableTimelineNoneSelected, ui.documentTableTimelineExcludeNoneSelected !== false, 'timeline')}</div><div><div class="label">File</div>${rapidSimpleFilterMarkup(items.fileItems, ui.documentTableFileIds || [], ui.documentTableFileExcludeIds || [], !!ui.documentTableFileNoneSelected, ui.documentTableFileExcludeNoneSelected !== false, 'file')}</div><div><div class="label">Document type</div><div class="elementsFilterChecklist">${typeOptions.length ? typeOptions.map(item => `<label class="checkItem" style="margin:0"><input type="checkbox" data-rapid-type-filter value="${escapeHtml(item.id)}" ${selectedTypeSet.has(item.id) ? 'checked' : ''} /> <span>${escapeHtml(item.name)}</span></label>`).join('') : '<div class="hint">No file types.</div>'}</div></div><div><div class="label">Status</div>${rapidSimpleFilterMarkup(getDocumentStatusOptions(), ui.documentTableStatusIds || [], ui.documentTableStatusExcludeIds || [], !!ui.documentTableStatusNoneSelected, ui.documentTableStatusExcludeNoneSelected !== false, 'status')}</div></div></div>`;
   }
   function setRapidFilterPanelOpen(setId, open){
+    saveRapidDiscoveryScrollPosition(setId);
     discoveryState.rapidFilterPanelOpenBySet = discoveryState.rapidFilterPanelOpenBySet || {};
     discoveryState.rapidFilterPanelOpenBySet[setId] = !!open;
     saveDiscoveryLocal();
-    renderDiscoveryClientList();
+    renderRapidDiscoveryPreservingScroll(setId);
   }
   function bindRapidDiscoveryDocumentFilters(host){
     if(!host) return;
-    const rerender = ()=>{ saveDiscoveryLocal(); renderDiscoveryClientList(); };
+    const getBoundRapidSetId = () => (host.querySelector('[data-rapid-table-wrap]')?.getAttribute('data-rapid-table-wrap')) || getRapidDiscoverySetIdFromUrl() || getSelectedDiscoverySet()?.id || '';
+    const rerender = ()=>{
+      const setId = getBoundRapidSetId();
+      saveRapidDiscoveryScrollPosition(setId);
+      saveDiscoveryLocal();
+      renderRapidDiscoveryPreservingScroll(setId);
+    };
     host.querySelectorAll('[data-rapid-filter-toggle]').forEach(btn => btn.addEventListener('click', ()=>{
       const setId = btn.getAttribute('data-rapid-filter-toggle') || '';
       setRapidFilterPanelOpen(setId, !((discoveryState.rapidFilterPanelOpenBySet || {})[setId]));
@@ -12619,7 +12630,7 @@ const endpoint = `${SUPABASE_URL}/functions/v1/finalize-exhibit-packet`;
     if(!win){ alert('Please allow popups to open response options.'); return; }
     const safeId = String(set.id).replace(/'/g, "\\'");
     win.document.open();
-    win.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>Responses</title><style>body{font-family:Arial,sans-serif;margin:20px;color:#0f172a}button{display:block;width:100%;margin:8px 0;border:1px solid #e2e8f0;border-radius:12px;background:#fff;padding:10px 12px;font-weight:700;text-align:left;cursor:pointer}button:hover{background:#f8fbff}.primary{background:#2563eb;color:#fff}.hint{color:#64748b;font-size:13px}</style></head><body><h2>Responses</h2><p class="hint">${escapeHtml(set.title || '')}</p><button onclick="window.opener.downloadDiscoveryWordForSet('${safeId}', true)">Download responses with Notes to attorney</button><button onclick="window.opener.downloadDiscoveryWordForSet('${safeId}', false)">Download responses without attorney notes</button><button onclick="window.opener.openDiscoveryUploadedDocsWindow('${safeId}')">Uploaded documents</button></body></html>`);
+    win.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>Responses</title><style>body{font-family:Arial,sans-serif;margin:20px;color:#0f172a}button{display:block;width:100%;margin:8px 0;border:1px solid #e2e8f0;border-radius:12px;background:#fff;padding:10px 12px;font-weight:700;text-align:left;cursor:pointer}button:hover{background:#f8fbff}.primary{background:#2563eb;color:#fff}.hint{color:#64748b;font-size:13px}</style></head><body><h2>Responses</h2><p class="hint">${escapeHtml(set.title || '')}</p><button onclick="window.opener.downloadDiscoveryWordForSet('${safeId}', true)">Download responses with Notes to attorney</button><button onclick="window.opener.downloadDiscoveryWordForSet('${safeId}', false)">Download responses without attorney notes</button><button onclick="window.opener.openDiscoveryUploadedDocsWindow('${safeId}')">Uploaded documents</button><button onclick="window.opener.openDiscoveryLogWindow('${safeId}')">Discovery log</button></body></html>`);
     win.document.close();
   }
 
@@ -12689,6 +12700,7 @@ const endpoint = `${SUPABASE_URL}/functions/v1/finalize-exhibit-packet`;
     host.querySelectorAll('[data-rapid-deselect-all]').forEach(btn => btn.addEventListener('click', () => selectRapidDiscoveryRows(btn.getAttribute('data-rapid-deselect-all'), false)));
     host.querySelectorAll('[data-rapid-remove-rows]').forEach(btn => btn.addEventListener('click', () => removeRapidDiscoveryRows(btn.getAttribute('data-rapid-remove-rows'))));
     host.querySelectorAll('[data-rapid-sort]').forEach(btn => btn.addEventListener('click', () => setRapidDiscoverySort(btn.getAttribute('data-rapid-sort'), btn.getAttribute('data-sort-next'))));
+    host.querySelectorAll('.rapidDiscoveryTableWrap').forEach(wrap => wrap.addEventListener('scroll', () => saveRapidDiscoveryScrollPosition(wrap.getAttribute('data-rapid-table-wrap')), { passive:true }));
     bindRapidDiscoveryDocumentFilters(host);
     host.querySelectorAll('[data-rapid-view-doc]').forEach(btn => btn.addEventListener('click', () => openRapidDiscoveryDocumentWindow(btn.getAttribute('data-rapid-view-doc'))));
     host.querySelectorAll('[data-rapid-commit]').forEach(btn => btn.addEventListener('click', () => commitRapidDiscoveryAssignments(btn.getAttribute('data-rapid-commit'))));
@@ -12724,13 +12736,56 @@ const endpoint = `${SUPABASE_URL}/functions/v1/finalize-exhibit-packet`;
     return `${date}_${abbr}_req.${num}`;
   }
   function prefixedDiscoveryFileName(set, req, originalName){ return `${discoveryDownloadPrefix(set, req)}_${sanitizeFileName(originalName || 'file')}`; }
+  function discoveryExtensionFromMime(mime){
+    const value = String(mime || '').toLowerCase();
+    if(value.includes('heic')) return '.heic';
+    if(value.includes('heif')) return '.heif';
+    if(value.includes('jpeg') || value.includes('jpg')) return '.jpg';
+    if(value.includes('png')) return '.png';
+    if(value.includes('pdf')) return '.pdf';
+    if(value.includes('mp4')) return '.mp4';
+    if(value.includes('quicktime') || value.includes('mov')) return '.mov';
+    if(value.includes('mpeg') || value.includes('mp3')) return '.mp3';
+    if(value.includes('mp4a') || value.includes('m4a')) return '.m4a';
+    if(value.includes('wav')) return '.wav';
+    if(value.includes('wordprocessingml') || value.includes('msword')) return '.docx';
+    if(value.includes('spreadsheetml') || value.includes('excel')) return '.xlsx';
+    return '';
+  }
+  function discoveryExtensionFromPathOrUrl(value){
+    const raw = String(value || '').split('?')[0].split('#')[0].split('/').pop() || '';
+    const match = raw.match(/\.([a-zA-Z0-9]{1,8})$/);
+    return match ? `.${match[1].toLowerCase()}` : '';
+  }
+  function discoveryKnownFileExtension(file, fallbackUrl=''){
+    const candidates = [
+      file?.file_name,
+      file?.name,
+      file?.original_file_name,
+      file?.originalFileName,
+      file?.file_path,
+      file?.filePath,
+      fallbackUrl
+    ];
+    for(const value of candidates){
+      const ext = discoveryExtensionFromPathOrUrl(value);
+      if(ext) return ext;
+    }
+    return discoveryExtensionFromMime(file?.file_type || file?.mime_type || file?.mimeType || file?.type || '');
+  }
+  function ensureDiscoveryDownloadExtension(name, file=null, fallbackUrl=''){
+    let safe = sanitizeFileName(name || file?.file_name || file?.name || 'document');
+    const currentExt = discoveryExtensionFromPathOrUrl(safe);
+    if(currentExt) return safe;
+    const ext = discoveryKnownFileExtension(file || {}, fallbackUrl);
+    return ext ? `${safe}${ext}` : safe;
+  }
   function discoveryDocumentDefaultDownloadName(set, req, file){
-    const original = String(file?.file_name || file?.name || 'document').split('/').pop();
-    const extMatch = original.match(/\.[a-zA-Z0-9]{1,8}$/);
-    const ext = extMatch ? extMatch[0] : '';
+    const original = String(file?.file_name || file?.name || file?.file_path || 'document').split('/').pop();
+    const ext = discoveryKnownFileExtension(file || {});
     const base = original.replace(/\.[a-zA-Z0-9]{1,8}$/, '');
     const num = String(req?.request_number || '').replace(/[^a-zA-Z0-9._-]+/g,'_') || 'no_number';
-    return sanitizeFileName(`${discoveryDateShort(set?.date_received || set?.created_at || '')}_${getDiscoveryAbbr(req?.request_type || set?.discovery_type || '')}_req.${num}_${base}${ext}`);
+    return ensureDiscoveryDownloadExtension(`${discoveryDateShort(set?.date_received || set?.created_at || '')}_${getDiscoveryAbbr(req?.request_type || set?.discovery_type || '')}_req.${num}_${base}`, file);
   }
   function prefixedDiscoveryFileName(set, req, originalName){ return discoveryDocumentDefaultDownloadName(set, req, { file_name: originalName || 'file' }); }
   function discoveryWordBlob(set, includeAttorneyNotes=true){
@@ -12764,21 +12819,39 @@ const endpoint = `${SUPABASE_URL}/functions/v1/finalize-exhibit-packet`;
     if(!win){ alert('Please allow popups to view uploaded documents.'); return; }
     const sections = reqs.map(req => {
       const files = discoveryFilesForRequest(req.id).filter(f => f.file_path);
-      return `<section style="border:1px solid #e2e8f0;border-radius:14px;padding:14px;margin:12px 0;background:#fff"><h2 style="margin:0 0 8px 0">Request ${escapeHtml(req.request_number || '')}</h2><div style="white-space:pre-wrap;margin-bottom:10px">${escapeHtml(req.request_text || '')}</div>${files.length ? `<ul>${files.map(f => `<li><a target="_blank" href="${escapeHtml(getDocumentPublicUrl(f.file_path))}">${escapeHtml(f.file_name || 'Document')}</a></li>`).join('')}</ul>` : '<p style="color:#64748b">No documents uploaded for this request.</p>'}</section>`;
+      return `<section style="border:1px solid #e2e8f0;border-radius:14px;padding:14px;margin:12px 0;background:#fff"><h2 style="margin:0 0 8px 0">Request ${escapeHtml(req.request_number || '')}</h2><div style="white-space:pre-wrap;margin-bottom:10px">${escapeHtml(req.request_text || '')}</div>${files.length ? `<ul>${files.map(f => { const u = getDocumentPublicUrl(f.file_path); return `<li><a target="_blank" href="${escapeHtml(u)}">${escapeHtml(ensureDiscoveryDownloadExtension(f.file_name || 'Document', f, u))}</a></li>`; }).join('')}</ul>` : '<p style="color:#64748b">No documents uploaded for this request.</p>'}</section>`;
     }).join('');
     win.document.open();
     win.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>Uploaded discovery documents</title><style>body{font-family:Arial,sans-serif;margin:24px;color:#0f172a}button{border:1px solid #e2e8f0;border-radius:999px;background:#2563eb;color:white;padding:10px 14px;font-weight:700;cursor:pointer}.hint{color:#64748b}</style></head><body><h1>Uploaded documents</h1><p class="hint">${escapeHtml(set.title || '')}</p><button onclick="window.opener.openDiscoveryDocumentDownloadWindow('${escapeHtml(set.id)}')">Download documents</button>${sections}</body></html>`);
     win.document.close();
   }
+  function openDiscoveryLogWindow(setId){
+    const set = getDiscoverySetById(setId);
+    if(!set){ alert('Select a discovery set first.'); return; }
+    const reqs = discoveryRequestsForSet(set.id, true);
+    const win = window.open('', '_blank', 'width=1200,height=800,scrollbars=yes,resizable=yes');
+    if(!win){ alert('Please allow popups to view the discovery log.'); return; }
+    const rows = reqs.map(req => {
+      const files = discoveryFilesForRequest(req.id).filter(f => f.file_path);
+      const names = files.length
+        ? `<ul style="margin:0;padding-left:18px">${files.map(f => { const u = getDocumentPublicUrl(f.file_path); return `<li>${escapeHtml(ensureDiscoveryDownloadExtension(f.file_name || 'Document', f, u))}</li>`; }).join('')}</ul>`
+        : '<span style="color:#64748b">No files associated with this request.</span>';
+      return `<tr><td>${escapeHtml(set.title || 'Discovery request')}</td><td>Request ${escapeHtml(req.request_number || '')}</td><td>${names}</td></tr>`;
+    }).join('');
+    win.document.open();
+    win.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>Discovery log</title><style>body{font-family:Arial,sans-serif;margin:24px;color:#0f172a}table{width:100%;border-collapse:collapse}th,td{border-bottom:1px solid #e2e8f0;padding:10px;text-align:left;vertical-align:top}th{background:#f8fbff}h1{margin-bottom:6px}.hint{color:#64748b}</style></head><body><h1>Discovery log</h1><p class="hint">${escapeHtml(set.title || '')}</p><table><thead><tr><th>Discovery request</th><th>Request number</th><th>Associated files</th></tr></thead><tbody>${rows || '<tr><td colspan="3">No requests found.</td></tr>'}</tbody></table></body></html>`);
+    win.document.close();
+  }
+
   function openDiscoveryDocumentDownloadWindow(setId){
     const set = getDiscoverySetById(setId);
     if(!set){ alert('Select a discovery set first.'); return; }
     const rows = discoveryUploadedDocumentRows(set);
     const win = window.open('', '_blank', 'width=1200,height=800,scrollbars=yes,resizable=yes');
     if(!win){ alert('Please allow popups to download documents.'); return; }
-    const rowHtml = rows.length ? rows.map((row,i) => `<tr><td><input type="checkbox" data-include-doc="1" checked></td><td>${escapeHtml(row.file.file_name || 'Document')}</td><td><input data-url="${escapeHtml(row.url)}" data-index="${i}" value="${escapeHtml(row.defaultName)}" style="width:100%;padding:8px;border:1px solid #e2e8f0;border-radius:8px"></td></tr>`).join('') : '<tr><td colspan="3">No uploaded documents found.</td></tr>';
+    const rowHtml = rows.length ? rows.map((row,i) => { const ext = discoveryKnownFileExtension(row.file, row.url); const original = ensureDiscoveryDownloadExtension(row.file.file_name || 'Document', row.file, row.url); return `<tr><td><input type="checkbox" data-include-doc="1" checked></td><td>${escapeHtml(original)}</td><td><input data-url="${escapeHtml(row.url)}" data-ext="${escapeHtml(ext)}" data-index="${i}" value="${escapeHtml(row.defaultName)}" style="width:100%;padding:8px;border:1px solid #e2e8f0;border-radius:8px"></td></tr>`; }).join('') : '<tr><td colspan="3">No uploaded documents found.</td></tr>';
     win.document.open();
-    win.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>Download discovery documents</title><style>body{font-family:Arial,sans-serif;margin:24px;color:#0f172a}table{width:100%;border-collapse:collapse}th,td{border-bottom:1px solid #e2e8f0;padding:10px;text-align:left;vertical-align:top}button{border:1px solid #e2e8f0;border-radius:999px;background:#2563eb;color:white;padding:10px 14px;font-weight:700;cursor:pointer}.hint{color:#64748b}</style></head><body><h1>Download documents</h1><p class="hint">Uncheck any documents you do not want downloaded. Edit the download names before creating the ZIP.</p><table><thead><tr><th>Download?</th><th>Original file name</th><th>Document name for download</th></tr></thead><tbody>${rowHtml}</tbody></table><p><button onclick="const plan=[...document.querySelectorAll('input[data-url]')].filter(i=>i.closest('tr').querySelector('[data-include-doc]').checked).map(i=>({url:i.dataset.url,name:i.value})); window.opener.discoveryDownloadNamedFilesZip('${escapeHtml(sanitizeFileName(set.title || 'discovery_documents'))}', plan);">Download files</button></p></body></html>`);
+    win.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>Download discovery documents</title><style>body{font-family:Arial,sans-serif;margin:24px;color:#0f172a}table{width:100%;border-collapse:collapse}th,td{border-bottom:1px solid #e2e8f0;padding:10px;text-align:left;vertical-align:top}button{border:1px solid #e2e8f0;border-radius:999px;background:#2563eb;color:white;padding:10px 14px;font-weight:700;cursor:pointer}.hint{color:#64748b}</style></head><body><h1>Download documents</h1><p class="hint">Uncheck any documents you do not want downloaded. Edit the download names before creating the ZIP.</p><table><thead><tr><th>Download?</th><th>Original file name</th><th>Document name for download</th></tr></thead><tbody>${rowHtml}</tbody></table><p><button onclick="const plan=[...document.querySelectorAll('input[data-url]')].filter(i=>i.closest('tr').querySelector('[data-include-doc]').checked).map(i=>({url:i.dataset.url,name:i.value,ext:i.dataset.ext||''})); window.opener.discoveryDownloadNamedFilesZip('${escapeHtml(sanitizeFileName(set.title || 'discovery_documents'))}', plan);">Download files</button></p></body></html>`);
     win.document.close();
   }
   async function discoveryDownloadNamedFilesZip(title, plan){
@@ -12789,7 +12862,7 @@ const endpoint = `${SUPABASE_URL}/functions/v1/finalize-exhibit-packet`;
         const res = await fetch(item.url);
         if(!res.ok) throw new Error('Could not download ' + item.url);
         const blob = await res.blob();
-        zip.file(sanitizeFileName(item.name || 'document'), blob);
+        let finalName = sanitizeFileName(item.name || 'document'); if(!discoveryExtensionFromPathOrUrl(finalName) && item.ext) finalName += item.ext; finalName = ensureDiscoveryDownloadExtension(finalName, { file_name:item.name, file_path:item.url }, item.url); zip.file(finalName, blob);
       }catch(e){ zip.file(`ERROR_${sanitizeFileName(item.name || 'document')}.txt`, String(e?.message || e)); }
     }
     const blob = await zip.generateAsync({ type:'blob' });
@@ -12801,6 +12874,7 @@ const endpoint = `${SUPABASE_URL}/functions/v1/finalize-exhibit-packet`;
   }
   window.openDiscoveryDocumentDownloadWindow = openDiscoveryDocumentDownloadWindow;
   window.openDiscoveryUploadedDocsWindow = openDiscoveryUploadedDocsWindow;
+  window.openDiscoveryLogWindow = openDiscoveryLogWindow;
   window.discoveryDownloadNamedFilesZip = discoveryDownloadNamedFilesZip;
   async function downloadDiscoveryResponsesBundle(setId=null){
     const set = setId ? getDiscoverySetById(setId) : getSelectedDiscoverySet();
