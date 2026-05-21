@@ -1728,6 +1728,19 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_KEY, {
     .rapidDiscoveryFilterPanel{margin-top:10px;border:1px solid var(--border);border-radius:14px;background:#fff;padding:10px;}
     .rapidDiscoveryWindowNotice{display:inline-flex;align-items:center;gap:8px;border:1px solid rgba(37,99,235,.20);background:#f8fbff;border-radius:999px;padding:6px 10px;font-size:12px;font-weight:800;color:var(--brand2);}
 
+    .rapidDiscoveryNumberCell,.rapidDiscoveryNumberHead{width:64px!important;min-width:64px!important;max-width:64px!important;text-align:center!important;font-variant-numeric:tabular-nums;color:var(--muted);font-weight:900;}
+    .rapidDiscoveryDocActions{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-top:4px;}
+    .rapidDiscoveryViewBtn{padding:4px 8px;font-size:11px;border-radius:999px;background:#f8fbff;color:var(--brand2);box-shadow:none;}
+    .rapidDiscoveryCellBtn.isPending{background:#dbeafe!important;border-color:#93c5fd!important;color:#1d4ed8!important;box-shadow:0 0 0 2px rgba(37,99,235,.10);}
+    .rapidDiscoveryCommitBtn{background:var(--brand);border-color:rgba(29,78,216,.35);color:#fff;}
+    .rapidDiscoveryCommitBtn:disabled{opacity:.55;cursor:not-allowed;background:#94a3b8;border-color:#94a3b8;}
+    .rapidDiscoveryTable th.rapidDiscoveryNumberHead,.rapidDiscoveryTable td.rapidDiscoveryNumberCell{position:sticky;left:0!important;z-index:7;background:#fff;box-shadow:1px 0 0 var(--border);}
+    .rapidDiscoveryTable th.rapidDiscoveryRemoveHead,.rapidDiscoveryTable td.rapidDiscoveryRemoveCell{position:sticky;left:64px!important;z-index:6;background:#fff;box-shadow:1px 0 0 var(--border);}
+    .rapidDiscoveryTable th.rapidDiscoveryDocHead,.rapidDiscoveryTable td.rapidDiscoveryDocCell{position:sticky;left:122px!important;z-index:5;background:#fff;box-shadow:1px 0 0 var(--border);}
+    .rapidDiscoveryTable thead th.rapidDiscoveryNumberHead{z-index:10;background:#f8fbff;}
+    .rapidDiscoveryTable thead th.rapidDiscoveryRemoveHead{z-index:9;background:#f8fbff;}
+    .rapidDiscoveryTable thead th.rapidDiscoveryDocHead{z-index:8;background:#f8fbff;}
+
     .discoveryFileList{display:grid;gap:6px;}
     .discoveryFilePill{display:flex;justify-content:space-between;gap:8px;align-items:center;border:1px solid var(--border);border-radius:999px;background:var(--surface2);padding:6px 10px;font-size:12px;font-weight:800;}
     .discoveryStatusPill{display:inline-flex;align-items:center;gap:6px;padding:5px 10px;border-radius:999px;border:1px solid rgba(37,99,235,.24);background:rgba(37,99,235,.08);color:var(--brand2);font-size:12px;font-weight:900;}
@@ -11953,7 +11966,68 @@ const endpoint = `${SUPABASE_URL}/functions/v1/finalize-exhibit-packet`;
     renderDiscovery();
     restoreRapidDiscoveryScrollPosition(setId);
   }
-  async function attachExistingMatterDocumentToDiscoveryRequest(requestId, docId){
+
+  function rapidDiscoveryPendingAssignments(setId){
+    const raw = ((discoveryState.rapidPendingAssignmentsBySet || {})[setId]) || [];
+    return Array.isArray(raw) ? raw.filter(item => item && item.docId && item.requestId) : [];
+  }
+  function rapidDiscoveryPendingKey(docId, requestId){
+    return `${String(docId || '')}::${String(requestId || '')}`;
+  }
+  function isRapidDiscoveryAssignmentPending(setId, docId, requestId){
+    const key = rapidDiscoveryPendingKey(docId, requestId);
+    return rapidDiscoveryPendingAssignments(setId).some(item => rapidDiscoveryPendingKey(item.docId, item.requestId) === key);
+  }
+  function setRapidDiscoveryAssignmentPending(setId, docId, requestId, pending){
+    discoveryState.rapidPendingAssignmentsBySet = discoveryState.rapidPendingAssignmentsBySet || {};
+    const list = rapidDiscoveryPendingAssignments(setId);
+    const key = rapidDiscoveryPendingKey(docId, requestId);
+    const next = list.filter(item => rapidDiscoveryPendingKey(item.docId, item.requestId) !== key);
+    if(pending) next.push({ docId:String(docId || ''), requestId:String(requestId || '') });
+    discoveryState.rapidPendingAssignmentsBySet[setId] = next;
+    saveDiscoveryLocal();
+  }
+  function toggleRapidDiscoveryAssignment(setId, docId, requestId){
+    const req = (discoveryState.requests || []).find(r => String(r.id) === String(requestId));
+    const realSetId = setId || (req ? req.discovery_set_id : '');
+    if(!realSetId || !docId || !requestId) return;
+    const nextPending = !isRapidDiscoveryAssignmentPending(realSetId, docId, requestId);
+    setRapidDiscoveryAssignmentPending(realSetId, docId, requestId, nextPending);
+    renderRapidDiscoveryPreservingScroll(realSetId);
+  }
+  async function commitRapidDiscoveryAssignments(setId){
+    const pending = rapidDiscoveryPendingAssignments(setId);
+    if(!pending.length){ alert('Select at least one document/request button first.'); return; }
+    saveRapidDiscoveryScrollPosition(setId);
+    const seen = new Set();
+    const unique = pending.filter(item => {
+      const key = rapidDiscoveryPendingKey(item.docId, item.requestId);
+      if(seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+    for(const item of unique){
+      await attachExistingMatterDocumentToDiscoveryRequest(item.requestId, item.docId, { deferRender:true });
+    }
+    discoveryState.rapidPendingAssignmentsBySet = discoveryState.rapidPendingAssignmentsBySet || {};
+    discoveryState.rapidPendingAssignmentsBySet[setId] = [];
+    saveDiscoveryLocal();
+    renderRapidDiscoveryPreservingScroll(setId);
+  }
+  function openRapidDiscoveryDocumentWindow(docId){
+    const doc = getRapidDiscoveryMatterDocuments().find(d => String(d.id) === String(docId));
+    if(!doc){ alert('Could not find that document.'); return; }
+    const path = getAnyDocumentFilePath(doc);
+    if(!path){ alert('This document does not have an uploaded file to view.'); return; }
+    const url = window.getDocumentPublicUrl ? window.getDocumentPublicUrl(path) : '';
+    if(!url){ alert('Could not create a document view link.'); return; }
+    const name = `rapid_doc_${String(docId || '').replace(/[^a-zA-Z0-9_-]/g,'') || Date.now()}`;
+    const features = 'popup=yes,width=1100,height=800,left=80,top=60,noopener=yes,noreferrer=yes,scrollbars=yes,resizable=yes';
+    const opened = window.open(url, name, features);
+    if(!opened) alert('The browser blocked the document window. Allow popups for this site and try again.');
+  }
+
+  async function attachExistingMatterDocumentToDiscoveryRequest(requestId, docId, options = {}){
     const doc = getRapidDiscoveryMatterDocuments().find(d => String(d.id) === String(docId));
     const req = (discoveryState.requests || []).find(r => String(r.id) === String(requestId));
     if(!doc || !req){ alert('Could not find that document or request.'); return; }
@@ -11961,7 +12035,7 @@ const endpoint = `${SUPABASE_URL}/functions/v1/finalize-exhibit-packet`;
     const rapidSetId = set ? set.id : '';
     saveRapidDiscoveryScrollPosition(rapidSetId);
     const duplicate = (discoveryState.files || []).some(f => String(f.request_id) === String(requestId) && String(f.document_id || '') === String(doc.id));
-    if(duplicate){ renderRapidDiscoveryPreservingScroll(rapidSetId); return; }
+    if(duplicate){ if(!options.deferRender) renderRapidDiscoveryPreservingScroll(rapidSetId); return; }
     const local = {
       id: discoveryUid(),
       case_id: getCaseId(),
@@ -11984,12 +12058,12 @@ const endpoint = `${SUPABASE_URL}/functions/v1/finalize-exhibit-packet`;
         discoveryState.files.push(local);
       }
       saveDiscoveryLocal();
-      renderRapidDiscoveryPreservingScroll(rapidSetId);
+      if(!options.deferRender) renderRapidDiscoveryPreservingScroll(rapidSetId);
     }catch(error){
       console.warn('Could not attach existing matter document to discovery request.', error);
       discoveryState.files.push(local);
       saveDiscoveryLocal();
-      renderRapidDiscoveryPreservingScroll(rapidSetId);
+      if(!options.deferRender) renderRapidDiscoveryPreservingScroll(rapidSetId);
     }
   }
   function getRapidDiscoverySetIdFromUrl(){
@@ -12099,10 +12173,14 @@ const endpoint = `${SUPABASE_URL}/functions/v1/finalize-exhibit-packet`;
     });
     const removedCount = rapidDiscoveryRemovedIds(set.id).length;
     const filtersOpen = !!((discoveryState.rapidFilterPanelOpenBySet || {})[set.id]);
-    const controls = `<div class="rapidDiscoveryControls"><div class="rapidDiscoveryFilterWrap"><label class="hint" for="rapidDiscoveryFilter_${escapeHtml(set.id)}">Filter documents</label><input id="rapidDiscoveryFilter_${escapeHtml(set.id)}" class="rapidDiscoveryFilterInput" type="text" data-rapid-filter="${escapeHtml(set.id)}" value="${escapeHtml(filterText)}" placeholder="Filter by document name, tag, or upload date..."></div><button type="button" class="mini" data-rapid-filter-toggle="${escapeHtml(set.id)}">${filtersOpen ? 'Hide filters' : 'Filters'}</button><button type="button" class="mini" data-rapid-select-all="${escapeHtml(set.id)}">Select all rows</button><button type="button" class="mini" data-rapid-deselect-all="${escapeHtml(set.id)}">Deselect all rows</button><button type="button" class="btnDanger mini" data-rapid-remove-rows="${escapeHtml(set.id)}">Remove selected rows</button>${removedCount ? `<button type="button" class="mini" data-rapid-reset="${escapeHtml(set.id)}">Show removed rows (${removedCount})</button>` : ''}</div>${renderRapidDiscoveryFilterPanel(set.id)}`;
-    const head = `<tr><th class="rapidDiscoveryRemoveHead">Remove</th><th class="rapidDiscoveryDocHead">Document</th><th><button type="button" class="mini" data-rapid-sort="${escapeHtml(set.id)}" data-sort-next="${sort === 'oldest' ? 'newest' : 'oldest'}">Upload date ${sort === 'oldest' ? '▲' : '▼'}</button></th>${rfpReqs.map(req => `<th>Req. ${escapeHtml(req.request_number || '')}</th>`).join('')}</tr>`;
-    const rows = docs.length ? docs.map(doc => `<tr><td class="rapidDiscoveryRemoveCell"><input type="checkbox" data-rapid-row-check="${escapeHtml(set.id)}" value="${escapeHtml(doc.id)}" aria-label="Select ${escapeHtml(doc.name || getAnyDocumentOriginalFileName(doc) || 'Document')} for removal"></td><td class="rapidDiscoveryDocCell"><div class="rapidDiscoveryDocName" title="${escapeHtml(doc.name || getAnyDocumentOriginalFileName(doc) || 'Document')}">${escapeHtml(doc.name || getAnyDocumentOriginalFileName(doc) || 'Document')}</div></td><td>${escapeHtml(formatDateForDisplay(rapidDiscoveryUploadDate(doc)) || rapidDiscoveryUploadDate(doc) || 'No date')}</td>${rfpReqs.map(req => `<td><button type="button" class="rapidDiscoveryCellBtn" data-rapid-assign-doc="${escapeHtml(doc.id)}" data-rapid-assign-req="${escapeHtml(req.id)}">Add to Req. ${escapeHtml(req.request_number || '')}</button></td>`).join('')}</tr>`).join('') : `<tr><td colspan="999"><div class="empty">${availableDocs.length ? 'No documents match the current filter.' : 'All matter documents have either been assigned to a request or removed from this worksheet.'}</div></td></tr>`;
-    return `<div class="rapidDiscoveryBox"><div class="rapidDiscoveryTop"><div>${rapidStandalone ? '<span class="rapidDiscoveryWindowNotice">Rapid worksheet window</span>' : `<button type="button" class="rapidDiscoveryLink" data-rapid-open="${escapeHtml(set.id)}">Rapid Discovery Responses</button>`}<div class="hint">All unassigned matter documents are listed below. Remove rows you do not want to consider, or click a document/request intersection to add the document as responsive to that request.</div></div><button type="button" class="btnGhost" data-rapid-close="${escapeHtml(set.id)}">${rapidStandalone ? 'Close window' : 'Close rapid worksheet'}</button></div>${controls}<div class="hint">Showing ${docs.length} of ${availableDocs.length} available documents. Documents already added to RFP requests are hidden automatically.</div><div class="rapidDiscoveryTableWrap" data-rapid-table-wrap="${escapeHtml(set.id)}"><table class="rapidDiscoveryTable"><thead>${head}</thead><tbody>${rows}</tbody></table></div></div>`;
+    const pendingCount = rapidDiscoveryPendingAssignments(set.id).length;
+    const controls = `<div class="rapidDiscoveryControls"><div class="rapidDiscoveryFilterWrap"><label class="hint" for="rapidDiscoveryFilter_${escapeHtml(set.id)}">Filter documents</label><input id="rapidDiscoveryFilter_${escapeHtml(set.id)}" class="rapidDiscoveryFilterInput" type="text" data-rapid-filter="${escapeHtml(set.id)}" value="${escapeHtml(filterText)}" placeholder="Filter by document name, tag, or upload date..."></div><button type="button" class="rapidDiscoveryCommitBtn mini" data-rapid-commit="${escapeHtml(set.id)}" ${pendingCount ? '' : 'disabled'}>Assign documents to requests${pendingCount ? ` (${pendingCount})` : ''}</button><button type="button" class="mini" data-rapid-filter-toggle="${escapeHtml(set.id)}">${filtersOpen ? 'Hide filters' : 'Filters'}</button><button type="button" class="mini" data-rapid-select-all="${escapeHtml(set.id)}">Select all rows</button><button type="button" class="mini" data-rapid-deselect-all="${escapeHtml(set.id)}">Deselect all rows</button><button type="button" class="btnDanger mini" data-rapid-remove-rows="${escapeHtml(set.id)}">Remove selected rows</button>${removedCount ? `<button type="button" class="mini" data-rapid-reset="${escapeHtml(set.id)}">Show removed rows (${removedCount})</button>` : ''}</div>${renderRapidDiscoveryFilterPanel(set.id)}`;
+    const head = `<tr><th class="rapidDiscoveryNumberHead">#</th><th class="rapidDiscoveryRemoveHead">Remove</th><th class="rapidDiscoveryDocHead">Document</th><th><button type="button" class="mini" data-rapid-sort="${escapeHtml(set.id)}" data-sort-next="${sort === 'oldest' ? 'newest' : 'oldest'}">Upload date ${sort === 'oldest' ? '▲' : '▼'}</button></th>${rfpReqs.map(req => `<th>Req. ${escapeHtml(req.request_number || '')}</th>`).join('')}</tr>`;
+    const rows = docs.length ? docs.map((doc, index) => {
+      const docLabel = doc.name || getAnyDocumentOriginalFileName(doc) || 'Document';
+      return `<tr><td class="rapidDiscoveryNumberCell">${index + 1}</td><td class="rapidDiscoveryRemoveCell"><input type="checkbox" data-rapid-row-check="${escapeHtml(set.id)}" value="${escapeHtml(doc.id)}" aria-label="Select ${escapeHtml(docLabel)} for removal"></td><td class="rapidDiscoveryDocCell"><div class="rapidDiscoveryDocName" title="${escapeHtml(docLabel)}">${escapeHtml(docLabel)}</div><div class="rapidDiscoveryDocActions"><button type="button" class="rapidDiscoveryViewBtn" data-rapid-view-doc="${escapeHtml(doc.id)}">View document</button></div></td><td>${escapeHtml(formatDateForDisplay(rapidDiscoveryUploadDate(doc)) || rapidDiscoveryUploadDate(doc) || 'No date')}</td>${rfpReqs.map(req => { const pending = isRapidDiscoveryAssignmentPending(set.id, doc.id, req.id); return `<td><button type="button" class="rapidDiscoveryCellBtn ${pending ? 'isPending' : ''}" data-rapid-assign-doc="${escapeHtml(doc.id)}" data-rapid-assign-req="${escapeHtml(req.id)}" data-rapid-assign-set="${escapeHtml(set.id)}">${pending ? 'Selected for Req. ' : 'Add to Req. '}${escapeHtml(req.request_number || '')}</button></td>`; }).join('')}</tr>`;
+    }).join('') : `<tr><td colspan="999"><div class="empty">${availableDocs.length ? 'No documents match the current filter.' : 'All matter documents have either been assigned to a request or removed from this worksheet.'}</div></td></tr>`;
+    return `<div class="rapidDiscoveryBox"><div class="rapidDiscoveryTop"><div>${rapidStandalone ? '<span class="rapidDiscoveryWindowNotice">Rapid worksheet window</span>' : `<button type="button" class="rapidDiscoveryLink" data-rapid-open="${escapeHtml(set.id)}">Rapid Discovery Responses</button>`}<div class="hint">All unassigned matter documents are listed below. Remove rows you do not want to consider, click document/request intersections to mark them, then use Assign documents to requests to save them.</div></div><button type="button" class="btnGhost" data-rapid-close="${escapeHtml(set.id)}">${rapidStandalone ? 'Close window' : 'Close rapid worksheet'}</button></div>${controls}<div class="hint">Showing ${docs.length} of ${availableDocs.length} available documents. Documents already added to RFP requests are hidden automatically.</div><div class="rapidDiscoveryTableWrap" data-rapid-table-wrap="${escapeHtml(set.id)}"><table class="rapidDiscoveryTable"><thead>${head}</thead><tbody>${rows}</tbody></table></div></div>`;
   }
 
 
@@ -12612,7 +12690,9 @@ const endpoint = `${SUPABASE_URL}/functions/v1/finalize-exhibit-packet`;
     host.querySelectorAll('[data-rapid-remove-rows]').forEach(btn => btn.addEventListener('click', () => removeRapidDiscoveryRows(btn.getAttribute('data-rapid-remove-rows'))));
     host.querySelectorAll('[data-rapid-sort]').forEach(btn => btn.addEventListener('click', () => setRapidDiscoverySort(btn.getAttribute('data-rapid-sort'), btn.getAttribute('data-sort-next'))));
     bindRapidDiscoveryDocumentFilters(host);
-    host.querySelectorAll('[data-rapid-assign-doc]').forEach(btn => btn.addEventListener('click', () => attachExistingMatterDocumentToDiscoveryRequest(btn.getAttribute('data-rapid-assign-req'), btn.getAttribute('data-rapid-assign-doc'))));
+    host.querySelectorAll('[data-rapid-view-doc]').forEach(btn => btn.addEventListener('click', () => openRapidDiscoveryDocumentWindow(btn.getAttribute('data-rapid-view-doc'))));
+    host.querySelectorAll('[data-rapid-commit]').forEach(btn => btn.addEventListener('click', () => commitRapidDiscoveryAssignments(btn.getAttribute('data-rapid-commit'))));
+    host.querySelectorAll('[data-rapid-assign-doc]').forEach(btn => btn.addEventListener('click', () => toggleRapidDiscoveryAssignment(btn.getAttribute('data-rapid-assign-set'), btn.getAttribute('data-rapid-assign-doc'), btn.getAttribute('data-rapid-assign-req'))));
     host.querySelectorAll('[data-discovery-need-help]').forEach(btn => btn.addEventListener('click', () => setDiscoveryNeedHelp(btn.getAttribute('data-discovery-need-help'), !getDiscoveryNeedHelp(btn.getAttribute('data-discovery-need-help')))));
   }
 
@@ -12774,7 +12854,9 @@ const endpoint = `${SUPABASE_URL}/functions/v1/finalize-exhibit-packet`;
         bindRapidDiscoveryDocumentFilters(host);
         host.querySelectorAll('.rapidDiscoveryTableWrap').forEach(wrap => wrap.addEventListener('scroll', () => saveRapidDiscoveryScrollPosition(wrap.getAttribute('data-rapid-table-wrap')), { passive:true }));
         restoreRapidDiscoveryScrollPosition(set ? set.id : '');
-        host.querySelectorAll('[data-rapid-assign-doc]').forEach(btn => btn.addEventListener('click', () => attachExistingMatterDocumentToDiscoveryRequest(btn.getAttribute('data-rapid-assign-req'), btn.getAttribute('data-rapid-assign-doc'))));
+        host.querySelectorAll('[data-rapid-view-doc]').forEach(btn => btn.addEventListener('click', () => openRapidDiscoveryDocumentWindow(btn.getAttribute('data-rapid-view-doc'))));
+    host.querySelectorAll('[data-rapid-commit]').forEach(btn => btn.addEventListener('click', () => commitRapidDiscoveryAssignments(btn.getAttribute('data-rapid-commit'))));
+    host.querySelectorAll('[data-rapid-assign-doc]').forEach(btn => btn.addEventListener('click', () => toggleRapidDiscoveryAssignment(btn.getAttribute('data-rapid-assign-set'), btn.getAttribute('data-rapid-assign-doc'), btn.getAttribute('data-rapid-assign-req'))));
       }
       return;
     }
