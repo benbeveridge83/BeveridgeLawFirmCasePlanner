@@ -12825,21 +12825,55 @@ const endpoint = `${SUPABASE_URL}/functions/v1/finalize-exhibit-packet`;
     win.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>Uploaded discovery documents</title><style>body{font-family:Arial,sans-serif;margin:24px;color:#0f172a}button{border:1px solid #e2e8f0;border-radius:999px;background:#2563eb;color:white;padding:10px 14px;font-weight:700;cursor:pointer}.hint{color:#64748b}</style></head><body><h1>Uploaded documents</h1><p class="hint">${escapeHtml(set.title || '')}</p><button onclick="window.opener.openDiscoveryDocumentDownloadWindow('${escapeHtml(set.id)}')">Download documents</button>${sections}</body></html>`);
     win.document.close();
   }
+  function discoveryLogRowsForSet(set){
+    if(!set) return [];
+    return discoveryRequestsForSet(set.id, true).map(req => {
+      const files = discoveryFilesForRequest(req.id).filter(f => f.file_path);
+      const fileNames = files.map(f => {
+        const u = getDocumentPublicUrl(f.file_path);
+        return ensureDiscoveryDownloadExtension(f.file_name || 'Document', f, u);
+      });
+      return { discoveryName: set.title || 'Discovery request', requestNumber: `Request ${req.request_number || ''}`, fileNames };
+    }).filter(row => row.fileNames.length);
+  }
+  function discoveryCsvEscape(value){ return `"${String(value ?? '').replace(/"/g, '""')}"`; }
+  function downloadDiscoveryLogCsv(setId){
+    const set = getDiscoverySetById(setId);
+    if(!set){ alert('Select a discovery set first.'); return; }
+    const rows = discoveryLogRowsForSet(set);
+    const csvRows = [['Discovery request','Request number','Associated files'], ...rows.map(row => [row.discoveryName, row.requestNumber, row.fileNames.join('; ')])];
+    const csv = csvRows.map(row => row.map(discoveryCsvEscape).join(',')).join('\r\n');
+    const blob = new Blob([csv], { type:'text/csv;charset=utf-8' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `${sanitizeFileName(set.title || 'discovery_log')}_discovery_log.csv`;
+    document.body.appendChild(a); a.click();
+    setTimeout(()=>{ URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+  }
+  function downloadDiscoveryLogWord(setId){
+    const set = getDiscoverySetById(setId);
+    if(!set){ alert('Select a discovery set first.'); return; }
+    const rows = discoveryLogRowsForSet(set);
+    const bodyRows = rows.map(row => `<tr><td>${escapeHtml(row.discoveryName)}</td><td>${escapeHtml(row.requestNumber)}</td><td>${escapeHtml(row.fileNames.join('; '))}</td></tr>`).join('') || '<tr><td colspan="3">No requests with associated files.</td></tr>';
+    const html = `<!doctype html><html><head><meta charset="utf-8"><title>${escapeHtml(set.title || 'Discovery log')}</title></head><body><h1>Discovery log</h1><p>${escapeHtml(set.title || '')}</p><table border="1" cellspacing="0" cellpadding="6"><thead><tr><th>Discovery request</th><th>Request number</th><th>Associated files</th></tr></thead><tbody>${bodyRows}</tbody></table></body></html>`;
+    const blob = new Blob([html], { type:'application/msword' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `${sanitizeFileName(set.title || 'discovery_log')}_discovery_log.doc`;
+    document.body.appendChild(a); a.click();
+    setTimeout(()=>{ URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+  }
   function openDiscoveryLogWindow(setId){
     const set = getDiscoverySetById(setId);
     if(!set){ alert('Select a discovery set first.'); return; }
-    const reqs = discoveryRequestsForSet(set.id, true);
     const win = window.open('', '_blank', 'width=1200,height=800,scrollbars=yes,resizable=yes');
     if(!win){ alert('Please allow popups to view the discovery log.'); return; }
-    const rows = reqs.map(req => {
-      const files = discoveryFilesForRequest(req.id).filter(f => f.file_path);
-      const names = files.length
-        ? `<ul style="margin:0;padding-left:18px">${files.map(f => { const u = getDocumentPublicUrl(f.file_path); return `<li>${escapeHtml(ensureDiscoveryDownloadExtension(f.file_name || 'Document', f, u))}</li>`; }).join('')}</ul>`
-        : '<span style="color:#64748b">No files associated with this request.</span>';
-      return `<tr><td>${escapeHtml(set.title || 'Discovery request')}</td><td>Request ${escapeHtml(req.request_number || '')}</td><td>${names}</td></tr>`;
+    const rows = discoveryLogRowsForSet(set).map(row => {
+      const names = `<ul style="margin:0;padding-left:18px">${row.fileNames.map(name => `<li>${escapeHtml(name)}</li>`).join('')}</ul>`;
+      return `<tr><td>${escapeHtml(row.discoveryName)}</td><td>${escapeHtml(row.requestNumber)}</td><td>${names}</td></tr>`;
     }).join('');
     win.document.open();
-    win.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>Discovery log</title><style>body{font-family:Arial,sans-serif;margin:24px;color:#0f172a}table{width:100%;border-collapse:collapse}th,td{border-bottom:1px solid #e2e8f0;padding:10px;text-align:left;vertical-align:top}th{background:#f8fbff}h1{margin-bottom:6px}.hint{color:#64748b}</style></head><body><h1>Discovery log</h1><p class="hint">${escapeHtml(set.title || '')}</p><table><thead><tr><th>Discovery request</th><th>Request number</th><th>Associated files</th></tr></thead><tbody>${rows || '<tr><td colspan="3">No requests found.</td></tr>'}</tbody></table></body></html>`);
+    win.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>Discovery log</title><style>body{font-family:Arial,sans-serif;margin:24px;color:#0f172a}table{width:100%;border-collapse:collapse}th,td{border-bottom:1px solid #e2e8f0;padding:10px;text-align:left;vertical-align:top}th{background:#f8fbff}button{border:1px solid #e2e8f0;border-radius:999px;background:#2563eb;color:white;padding:10px 14px;font-weight:700;cursor:pointer;margin-right:8px}.hint{color:#64748b}.actions{display:flex;gap:8px;flex-wrap:wrap;margin:14px 0}</style></head><body><h1>Discovery log</h1><p class="hint">${escapeHtml(set.title || '')}</p><div class="actions"><button onclick="window.opener.downloadDiscoveryLogCsv('${escapeHtml(set.id)}')">Download CSV</button><button onclick="window.opener.downloadDiscoveryLogWord('${escapeHtml(set.id)}')">Download Word doc table</button></div><table><thead><tr><th>Discovery request</th><th>Request number</th><th>Associated files</th></tr></thead><tbody>${rows || '<tr><td colspan="3">No requests with associated files.</td></tr>'}</tbody></table></body></html>`);
     win.document.close();
   }
 
@@ -12851,7 +12885,7 @@ const endpoint = `${SUPABASE_URL}/functions/v1/finalize-exhibit-packet`;
     if(!win){ alert('Please allow popups to download documents.'); return; }
     const rowHtml = rows.length ? rows.map((row,i) => { const ext = discoveryKnownFileExtension(row.file, row.url); const original = ensureDiscoveryDownloadExtension(row.file.file_name || 'Document', row.file, row.url); return `<tr><td><input type="checkbox" data-include-doc="1" checked></td><td>${escapeHtml(original)}</td><td><input data-url="${escapeHtml(row.url)}" data-ext="${escapeHtml(ext)}" data-index="${i}" value="${escapeHtml(row.defaultName)}" style="width:100%;padding:8px;border:1px solid #e2e8f0;border-radius:8px"></td></tr>`; }).join('') : '<tr><td colspan="3">No uploaded documents found.</td></tr>';
     win.document.open();
-    win.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>Download discovery documents</title><style>body{font-family:Arial,sans-serif;margin:24px;color:#0f172a}table{width:100%;border-collapse:collapse}th,td{border-bottom:1px solid #e2e8f0;padding:10px;text-align:left;vertical-align:top}button{border:1px solid #e2e8f0;border-radius:999px;background:#2563eb;color:white;padding:10px 14px;font-weight:700;cursor:pointer}.hint{color:#64748b}</style></head><body><h1>Download documents</h1><p class="hint">Uncheck any documents you do not want downloaded. Edit the download names before creating the ZIP.</p><table><thead><tr><th>Download?</th><th>Original file name</th><th>Document name for download</th></tr></thead><tbody>${rowHtml}</tbody></table><p><button onclick="const plan=[...document.querySelectorAll('input[data-url]')].filter(i=>i.closest('tr').querySelector('[data-include-doc]').checked).map(i=>({url:i.dataset.url,name:i.value,ext:i.dataset.ext||''})); window.opener.discoveryDownloadNamedFilesZip('${escapeHtml(sanitizeFileName(set.title || 'discovery_documents'))}', plan);">Download files</button></p></body></html>`);
+    win.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>Download discovery documents</title><style>body{font-family:Arial,sans-serif;margin:24px;color:#0f172a}table{width:100%;border-collapse:collapse}th,td{border-bottom:1px solid #e2e8f0;padding:10px;text-align:left;vertical-align:top}button{border:1px solid #e2e8f0;border-radius:999px;background:#2563eb;color:white;padding:10px 14px;font-weight:700;cursor:pointer}.btnSecondary{background:#fff;color:#0f172a}.hint{color:#64748b}.actions{display:flex;gap:8px;flex-wrap:wrap;margin:14px 0}</style></head><body><h1>Download documents</h1><p class="hint">Uncheck any documents you do not want downloaded. Edit the download names before creating the ZIP.</p><div class="actions"><button type="button" class="btnSecondary" onclick="document.querySelectorAll('[data-include-doc]').forEach(cb=>cb.checked=true)">Select all</button><button type="button" class="btnSecondary" onclick="document.querySelectorAll('[data-include-doc]').forEach(cb=>cb.checked=false)">Deselect all</button></div><table><thead><tr><th>Download?</th><th>Original file name</th><th>Document name for download</th></tr></thead><tbody>${rowHtml}</tbody></table><p><button onclick="const plan=[...document.querySelectorAll('input[data-url]')].filter(i=>i.closest('tr').querySelector('[data-include-doc]').checked).map(i=>({url:i.dataset.url,name:i.value,ext:i.dataset.ext||''})); window.opener.discoveryDownloadNamedFilesZip('${escapeHtml(sanitizeFileName(set.title || 'discovery_documents'))}', plan);">Download files</button></p></body></html>`);
     win.document.close();
   }
   async function discoveryDownloadNamedFilesZip(title, plan){
@@ -12875,6 +12909,8 @@ const endpoint = `${SUPABASE_URL}/functions/v1/finalize-exhibit-packet`;
   window.openDiscoveryDocumentDownloadWindow = openDiscoveryDocumentDownloadWindow;
   window.openDiscoveryUploadedDocsWindow = openDiscoveryUploadedDocsWindow;
   window.openDiscoveryLogWindow = openDiscoveryLogWindow;
+  window.downloadDiscoveryLogCsv = downloadDiscoveryLogCsv;
+  window.downloadDiscoveryLogWord = downloadDiscoveryLogWord;
   window.discoveryDownloadNamedFilesZip = discoveryDownloadNamedFilesZip;
   async function downloadDiscoveryResponsesBundle(setId=null){
     const set = setId ? getDiscoverySetById(setId) : getSelectedDiscoverySet();
