@@ -1673,6 +1673,44 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_KEY, {
     .directSyncStatus.ok{color:var(--ok);}.directSyncStatus.err{color:#991b1b;}
     .directSmallHelp{font-size:11px;color:var(--muted);} @media (max-width: 900px){.directSection.reportSubrelief,.directSection.reportIssue,.directSection.reportEntry{margin-left:0}.directQaRow{grid-template-columns:1fr}.directQaDrag{display:none}}
 
+
+    /* Inventory and Appraisement */
+    .inventoryPage{display:grid;gap:14px;}
+    .inventoryTop{display:flex;justify-content:space-between;gap:12px;align-items:flex-start;flex-wrap:wrap;}
+    .inventoryModeBar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;}
+    .inventoryModeBar button.active{background:rgba(37,99,235,.10);border-color:rgba(37,99,235,.32);color:var(--brand2);}
+    .inventoryAdminGrid{display:grid;grid-template-columns:minmax(320px,.8fr) minmax(420px,1.2fr);gap:14px;align-items:start;}
+    .inventoryBuilderBox{border:1px solid var(--border);border-radius:16px;background:#fff;padding:12px;display:grid;gap:10px;box-shadow:var(--shadow2);}
+    .inventoryTree{display:grid;gap:8px;max-height:520px;overflow:auto;padding-right:4px;}
+    .inventoryCatRow{border:1px solid var(--border);border-radius:12px;background:#fff;padding:8px 10px;display:grid;gap:6px;}
+    .inventoryCatTop{display:flex;justify-content:space-between;gap:8px;align-items:center;flex-wrap:wrap;}
+    .inventoryCatName{font-weight:900;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+    .inventoryIndent{display:inline-block;width:18px;}
+    .inventorySmallControls{display:flex;gap:6px;flex-wrap:wrap;align-items:center;}
+    .inventoryTableShell{overflow:auto;border:1px solid var(--border);border-radius:16px;background:#fff;max-height:calc(100vh - 300px);}
+    .inventoryTable{border-collapse:separate;border-spacing:0;min-width:1120px;width:max-content;background:#fff;}
+    .inventoryTable th,.inventoryTable td{border-bottom:1px solid var(--border);border-right:1px solid var(--border);padding:8px;vertical-align:top;background:#fff;}
+    .inventoryTable th{position:sticky;top:0;z-index:5;background:#f8fbff;font-size:12px;text-transform:uppercase;letter-spacing:.03em;color:var(--muted);}
+    .inventoryTable th:first-child,.inventoryTable td:first-child{position:sticky;left:0;z-index:6;background:#fff;min-width:260px;box-shadow:1px 0 0 var(--border);}
+    .inventoryTable thead th:first-child{background:#f8fbff;z-index:9;}
+    .inventoryCategoryBand td{background:#0f172a!important;color:#fff;font-weight:900;text-align:center;}
+    .inventoryCategoryBand td:first-child{background:#0f172a!important;color:#fff;}
+    .inventoryCellWrap{display:grid;gap:6px;min-width:190px;}
+    .inventoryCellInput{width:100%;border:1px solid var(--border);border-radius:10px;padding:7px 9px;background:#fff;}
+    .inventoryCellNote{min-height:52px;border:1px solid var(--border);border-radius:10px;padding:8px;background:#fff;line-height:1.35;white-space:normal;min-width:220px;}
+    .inventoryCellNote:empty:before{content:attr(data-placeholder);color:var(--muted);}
+    .inventoryCellTools{display:flex;gap:4px;flex-wrap:wrap;align-items:center;}
+    .inventoryCellTools button{padding:4px 7px;font-size:11px;border-radius:8px;box-shadow:none;}
+    .inventoryFileList{display:grid;gap:4px;font-size:11px;color:var(--muted);white-space:normal;}
+    .inventoryAddRowBar{display:flex;gap:8px;flex-wrap:wrap;align-items:end;border:1px solid var(--border);border-radius:16px;background:#fbfdff;padding:12px;}
+    .inventoryAddRowBar > div{min-width:210px;}
+    .inventoryColumnsList{display:grid;gap:8px;max-height:520px;overflow:auto;}
+    .inventoryColumnCard{border:1px solid var(--border);border-radius:12px;background:#fff;padding:10px;display:grid;gap:8px;}
+    .inventorySwatch{display:inline-block;width:12px;height:12px;border-radius:999px;border:1px solid rgba(15,23,42,.20);vertical-align:middle;margin-right:5px;}
+    .inventoryRowActions{display:flex;gap:6px;flex-wrap:wrap;align-items:center;}
+    @media (max-width: 1100px){.inventoryAdminGrid{grid-template-columns:1fr}.inventoryTable{min-width:920px}}
+
+
     /* Discovery portal */
     body.discovery-screen-wide .topbar-inner, body.discovery-screen-wide .tabs, body.discovery-screen-wide .container{max-width:none;width:100%;padding-left:24px;padding-right:24px;}
     .discoveryPage{padding:12px;display:grid;gap:14px;}
@@ -1837,7 +1875,7 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_KEY, {
       </div>
     </div>
   </div>
-  <div class="tabs" id="mainTabs" style="display:none"><a id="tabOutline" class="tab active" data-view-link="outline" href="?view=outline">Case Outline</a><a id="tabDocuments" class="tab" data-view-link="documents" href="?view=documents">Documents</a><a id="tabPeople" class="tab" data-view-link="people" href="?view=people">People</a><a id="tabElements" class="tab" data-view-link="elements" href="?view=elements">Elements</a><a id="tabTimeline" class="tab" data-view-link="timeline" href="?view=timeline">Timeline</a><a id="tabTrialIssues" class="tab" data-view-link="trialissues" href="?view=trialissues">Trial Issues</a><a id="tabReports" class="tab" data-view-link="reports" href="?view=reports">Reports</a><a id="tabCross" class="tab" data-view-link="cross" href="?view=cross">Cross</a><a id="tabMattDirect" class="tab" data-view-link="mattdirect" href="?view=mattdirect">Matt Direct</a><a id="tabTrialIssuesExhibits" class="tab" data-view-link="trialissuesexhibits" href="?view=trialissuesexhibits" style="display:none">Trial Issues Exhibits</a><a id="tabDocumentAnalysis" class="tab" data-view-link="documentanalysis" href="?view=documentanalysis">Document Analysis</a><a id="tabDiscovery" class="tab" data-view-link="discovery" href="?view=discovery">Discovery</a><a id="tabSettings" class="tab" data-view-link="settings" href="?view=settings">Add Tag</a></div>
+  <div class="tabs" id="mainTabs" style="display:none"><a id="tabOutline" class="tab active" data-view-link="outline" href="?view=outline">Case Outline</a><a id="tabDocuments" class="tab" data-view-link="documents" href="?view=documents">Documents</a><a id="tabPeople" class="tab" data-view-link="people" href="?view=people">People</a><a id="tabElements" class="tab" data-view-link="elements" href="?view=elements">Elements</a><a id="tabTimeline" class="tab" data-view-link="timeline" href="?view=timeline">Timeline</a><a id="tabTrialIssues" class="tab" data-view-link="trialissues" href="?view=trialissues">Trial Issues</a><a id="tabReports" class="tab" data-view-link="reports" href="?view=reports">Reports</a><a id="tabCross" class="tab" data-view-link="cross" href="?view=cross">Cross</a><a id="tabMattDirect" class="tab" data-view-link="mattdirect" href="?view=mattdirect">Matt Direct</a><a id="tabTrialIssuesExhibits" class="tab" data-view-link="trialissuesexhibits" href="?view=trialissuesexhibits" style="display:none">Trial Issues Exhibits</a><a id="tabDocumentAnalysis" class="tab" data-view-link="documentanalysis" href="?view=documentanalysis">Document Analysis</a><a id="tabDiscovery" class="tab" data-view-link="discovery" href="?view=discovery">Discovery</a><a id="tabInventory" class="tab" data-view-link="inventory" href="?view=inventory">Inventory</a><a id="tabSettings" class="tab" data-view-link="settings" href="?view=settings">Add Tag</a></div>
   <div class="container" id="appContainer" style="display:none">
     <div id="viewOutline" class="card"><div style="display:flex;justify-content:space-between;gap:10px;align-items:center;flex-wrap:wrap"><h2 style="margin:0">Case Outline</h2><div style="display:flex;gap:8px;flex-wrap:wrap"><a class="btnGhost docOpenLink" data-view-link="outlineindex" href="?view=outlineindex">Outline Index</a><a class="btnGhost docOpenLink" data-view-link="structuredoutline" href="?view=structuredoutline">Structured Outline</a></div></div><div class="hint">Build a structured outline and then tie it to witnesses, exhibits, and testimony. Add witnesses to a row to create witness columns. In each witness column cell, select exhibits (from Documents) and add testimony.</div>
       <div class="toolbar" style="align-items:flex-start"><div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center"><button id="addTop" class="btnPrimary">+ Add top-level heading</button><button id="collapseAll" class="btnGhost">Collapse all</button><button id="expandAll" class="btnGhost">Expand all</button><button id="structureViewToggle" class="btnGhost">Structure view</button><button id="outlineCompactToggle" class="btnGhost">Name-only view</button><div id="outlineTagFilterHost"></div><div id="outlineWitnessFilterHost"></div></div><div style="height:1px; flex-basis:100%"></div><div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center"><span class="pill" id="selHint">Select a row, then use these controls</span><button id="actSibling" class="btnGhost">+ Sibling</button><button id="actChild" class="btnGhost">+ Child</button><button id="actIndent" class="btnGhost">↳ Indent</button><button id="actOutdent" class="btnGhost">↰ Outdent</button><button id="actUp" class="btnGhost">↑</button><button id="actDown" class="btnGhost">↓</button><button id="actDelete" class="btnDanger">Delete</button><span style="width:12px"></span><button id="actAddExhibit" class="btnPrimary">+ Add exhibit</button><span class="pill" id="exHint">Click a witness cell, select a document, then Add exhibit</span></div></div>
@@ -1929,6 +1967,35 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_KEY, {
         <div id="discoveryInstructionsEditor" class="discoveryInstructionEditor" contenteditable="true" data-placeholder="Write the instructions the client should see for this discovery type. You can paste images here."></div>
         <div class="hint">These instructions are automatically added when that discovery type is selected or uploaded.</div>
         <div class="discoveryModalActions"><button type="button" id="discoveryInstructionsSave" class="btnPrimary">Save instructions</button></div>
+      </div>
+    </div>
+
+
+    <div id="viewInventory" class="card inventoryPage" style="display:none">
+      <div class="inventoryTop">
+        <div><h2 style="margin:0 0 8px 0">Inventory and Appraisement</h2><div class="hint">Build a custom property/debt inventory for the matter. Admins set the categories, subcategories, columns, field types, and select-list colors. Users add rows, enter values, notes, and supporting files.</div></div>
+        <div class="inventoryModeBar"><button type="button" id="inventoryUserModeBtn" class="btnPrimary active">Inventory</button><button type="button" id="inventoryAdminModeBtn" class="btnGhost">Admin builder</button></div>
+      </div>
+      <div id="inventoryAdminPane" style="display:none">
+        <div class="inventoryAdminGrid">
+          <div class="inventoryBuilderBox">
+            <h3 style="margin:0">Category structure</h3>
+            <div class="hint">Add property/debt categories with multiple levels. Only active categories appear on the matter inventory page.</div>
+            <div style="display:grid;gap:8px"><div><div class="label">Category name</div><input id="inventoryCategoryName" type="text" placeholder="Financial Accounts, Vehicles, Unsecured Credit" /></div><div><div class="label">Parent category</div><select id="inventoryCategoryParent"></select></div><div><div class="label">Type</div><select id="inventoryCategoryKind"><option value="property">Property / asset</option><option value="debt">Debt</option><option value="both">Both</option></select></div><button type="button" id="inventoryAddCategoryBtn" class="btnPrimary">Add category / subcategory</button></div>
+            <div id="inventoryCategoryTree" class="inventoryTree"></div>
+          </div>
+          <div class="inventoryBuilderBox">
+            <h3 style="margin:0">Columns and cell options</h3>
+            <div class="hint">Create columns that every inventory row will use. Select-list options can have colors. Format: <b>Value|#color</b>, one per line.</div>
+            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:8px;align-items:end"><div><div class="label">Column name</div><input id="inventoryColumnName" type="text" placeholder="Date of value, Value, H, W, Source" /></div><div><div class="label">Field type</div><select id="inventoryColumnType"><option value="text">Text</option><option value="date">Date</option><option value="money">Dollar amount</option><option value="number">Number</option><option value="select">Select list</option></select></div><div><div class="label">Options / colors</div><textarea id="inventoryColumnOptions" placeholder="Community|#e0f2fe\nSeparate|#fef3c7\nDisputed|#fee2e2"></textarea></div><button type="button" id="inventoryAddColumnBtn" class="btnPrimary">Add column</button></div>
+            <div id="inventoryColumnsList" class="inventoryColumnsList"></div>
+          </div>
+        </div>
+      </div>
+      <div id="inventoryUserPane">
+        <div class="inventoryAddRowBar"><div><div class="label">Add under category</div><select id="inventoryRowCategory"></select></div><div><div class="label">Item / account / property name</div><input id="inventoryRowName" type="text" placeholder="e.g., Chase Checking 4962, 2022 Jeep, Home Depot Card" /></div><div><button type="button" id="inventoryAddRowBtn" class="btnPrimary">Add property/debt row</button></div><div class="hint" style="flex:1;min-width:260px">Click into cells to enter values. Each cell can also hold notes, formatting, uploaded file names, or linked matter documents.</div></div>
+        <div id="inventoryEmpty" class="empty" style="display:none;margin-top:12px">No inventory rows yet. Add categories in Admin Builder, then add property/debt rows here.</div>
+        <div class="inventoryTableShell" id="inventoryTableShell" style="margin-top:12px"><table class="inventoryTable"><thead id="inventoryTableHead"></thead><tbody id="inventoryTableBody"></tbody></table></div>
       </div>
     </div>
 
@@ -2495,7 +2562,7 @@ function normalizeState(){ state.tags = Array.isArray(state.tags) ? state.tags.f
     function syncWitnessCellsFromSupabase(){ if (!Array.isArray(window.loadedWitnessCells)) return; const cellsByRow = new Map(); for (const cell of window.loadedWitnessCells) { if (!cell || !cell.row_id || !cell.person_id) continue; if (!cellsByRow.has(cell.row_id)) cellsByRow.set(cell.row_id, []); cellsByRow.get(cell.row_id).push(cell); } state.outline = (state.outline || []).map((node) => { const rowCells = cellsByRow.get(node.id) || []; const nextWitnessData = {}; const nextWitnessIds = []; for (const cell of rowCells) { nextWitnessIds.push(cell.person_id); const cellKey = testimonyCellKey(cell.row_id, cell.person_id); const localCell = node.witnessData && node.witnessData[cell.person_id] ? node.witnessData[cell.person_id] : null; const testimonyHtml = activeTestimonyEditKey === cellKey && localCell ? (localCell.testimonyHtml || '') : (cell.testimony_html || ''); nextWitnessData[cell.person_id] = { exhibits: Array.isArray(cell.exhibits) ? cell.exhibits : [], testimonyHtml, testimony: testimonyHtml.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim() }; } const localHeadingCell = node.witnessData && node.witnessData[HEADING_EXHIBIT_KEY] ? node.witnessData[HEADING_EXHIBIT_KEY] : null; if(localHeadingCell){ nextWitnessData[HEADING_EXHIBIT_KEY] = { exhibits: Array.isArray(localHeadingCell.exhibits) ? Array.from(new Set(localHeadingCell.exhibits)) : [], testimonyHtml: '', testimony: '' }; } return { ...node, witnessIds: Array.from(new Set(nextWitnessIds)), witnessData: nextWitnessData }; }); safeSave(); }
     window.syncWitnessCellsFromSupabase = syncWitnessCellsFromSupabase;
     window.addEventListener('storage', async (event) => { if (event.key !== window.LOCAL_SYNC_KEY || !event.newValue) return; let payload = null; try { payload = JSON.parse(event.newValue); } catch (e) { console.warn('Bad sync payload:', e); } console.log('Local sync event received:', payload); if (!payload || !payload.type) return; if (payload.type === 'witness_cells_changed') { await window.loadWitnessCells(); return; } if (payload.type === 'rows_changed') { await window.loadOutlineRows(); await window.loadWitnessCells(); return; } if (payload.type === 'people_changed') { await window.loadPeople(); await window.loadWitnessCells(); return; } if (payload.type === 'documents_changed') { await window.loadDocuments(); await window.loadWitnessCells(); return; } if (payload.type === 'tags_changed') { await window.loadTags(); return; } if (payload.type === 'row_tags_changed') { await window.loadRowTags(); return; } if (payload.type === 'document_tags_changed') { await window.loadDocumentTags(); return; } if (payload.type === 'person_tags_changed') { await window.loadPersonTags(); return; } });
-    const views = { outline: { tab: 'tabOutline', view:'viewOutline' }, documents: { tab: 'tabDocuments', view:'viewDocuments' }, documenttable: { tab: 'tabDocumentTable', view:'viewDocumentTable' }, documentanalysis: { tab: 'tabDocumentAnalysis', view:'viewDocumentAnalysis' }, tagindex: { tab: 'tabTagIndex', view:'viewTagIndex' }, outlineindex: { tab: 'tabOutlineIndex', view:'viewOutlineIndex' }, structuredoutline: { tab: 'tabStructuredOutline', view:'viewStructuredOutline' }, exhibits: { tab: 'tabExhibits', view:'viewExhibits' }, people: { tab: 'tabPeople', view:'viewPeople' }, elements: { tab: 'tabElements', view:'viewElements' }, timeline: { tab: 'tabTimeline', view:'viewTimeline' }, trialissues: { tab: 'tabTrialIssues', view:'viewTrialIssues' }, reports: { tab: 'tabReports', view:'viewReports' }, cross: { tab: 'tabCross', view:'viewCross' }, mattdirect: { tab: 'tabMattDirect', view:'viewDirect' }, trialissuesexhibits: { tab: 'tabTrialIssuesExhibits', view:'viewTrialIssuesExhibits' }, discovery: { tab: 'tabDiscovery', view:'viewDiscovery' }, settings: { tab: 'tabSettings', view:'viewSettings' } };
+    const views = { outline: { tab: 'tabOutline', view:'viewOutline' }, documents: { tab: 'tabDocuments', view:'viewDocuments' }, documenttable: { tab: 'tabDocumentTable', view:'viewDocumentTable' }, documentanalysis: { tab: 'tabDocumentAnalysis', view:'viewDocumentAnalysis' }, tagindex: { tab: 'tabTagIndex', view:'viewTagIndex' }, outlineindex: { tab: 'tabOutlineIndex', view:'viewOutlineIndex' }, structuredoutline: { tab: 'tabStructuredOutline', view:'viewStructuredOutline' }, exhibits: { tab: 'tabExhibits', view:'viewExhibits' }, people: { tab: 'tabPeople', view:'viewPeople' }, elements: { tab: 'tabElements', view:'viewElements' }, timeline: { tab: 'tabTimeline', view:'viewTimeline' }, trialissues: { tab: 'tabTrialIssues', view:'viewTrialIssues' }, reports: { tab: 'tabReports', view:'viewReports' }, cross: { tab: 'tabCross', view:'viewCross' }, mattdirect: { tab: 'tabMattDirect', view:'viewDirect' }, trialissuesexhibits: { tab: 'tabTrialIssuesExhibits', view:'viewTrialIssuesExhibits' }, discovery: { tab: 'tabDiscovery', view:'viewDiscovery' }, inventory: { tab: 'tabInventory', view:'viewInventory' }, settings: { tab: 'tabSettings', view:'viewSettings' } };
     function getInitialViewFromUrl(){
       try {
         const params = new URLSearchParams(window.location.search || '');
@@ -2529,7 +2596,7 @@ function normalizeState(){ state.tags = Array.isArray(state.tags) ? state.tags.f
         el.setAttribute('href', buildViewHref(viewName));
       });
     }
-    function setTab(which, opts={}){ if(which === 'direct') which = 'mattdirect'; let target = views[which] ? which : 'outline'; if(target === 'mattdirect'){ try{ localStorage.setItem(getDirectPartyStorageKey(), 'matt'); }catch(e){} } if(!canCurrentUserAccessView(target)){ target = firstAllowedView(); } ui.currentView = target; document.body.classList.toggle('tagindex-active', target === 'tagindex'); document.body.classList.toggle('outlineindex-active', target === 'outlineindex'); document.body.classList.toggle('outline-screen-wide', target === 'outline'); document.body.classList.toggle('documenttable-screen-wide', target === 'documenttable' && !!ui.documentWorksheetOpen); document.body.classList.toggle('documentanalysis-screen-wide', target === 'documentanalysis'); document.body.classList.toggle('cross-screen-wide', target === 'cross'); document.body.classList.toggle('direct-screen-wide', target === 'mattdirect' || target === 'direct'); document.body.classList.toggle('discovery-screen-wide', target === 'discovery'); for(const k of Object.keys(views)){ const on = k === target; const tabEl = $(views[k].tab); const viewEl = $(views[k].view); if(tabEl) tabEl.classList.toggle('active', on); if(viewEl) viewEl.style.display = on ? 'block' : 'none'; } $('viewOutlineIndex') && ( $('viewOutlineIndex').style.display = target === 'outlineindex' ? 'block' : 'none'); $('viewStructuredOutline') && ( $('viewStructuredOutline').style.display = target === 'structuredoutline' ? 'block' : 'none'); updateViewLinks(target); if(typeof updateTrialIssuesTocVisibility === 'function') updateTrialIssuesTocVisibility(); if(opts.pushState !== false){ const params = new URLSearchParams(window.location.search); const caseId = getCaseId(); if(caseId) params.set('case', caseId); else params.delete('case'); params.set('view', target); if(target === 'documenttable' && ui.documentWorksheetOpen) params.set('worksheet', '1'); else if(target === 'elements' && ui.elementsWorksheetOpen) params.set('worksheet', '1'); else params.delete('worksheet'); history.replaceState(null, '', '?' + params.toString()); } if(target==='documents') renderDocuments(); if(target==='documenttable') renderDocumentTable(); if(target==='documentanalysis'){ ui.documentAnalysisFilterPanelOpen = false; ui.documentAnalysisVisibleCount = ui.documentAnalysisVisibleCount || 20; scheduleDocumentAnalysisRender ? scheduleDocumentAnalysisRender() : renderDocumentAnalysis(); } if(target==='exhibits') renderExhibits(); if(target==='elements') renderElements(); if(target==='timeline') renderTimeline(); if(target==='trialissues') renderTrialIssues(); if(target==='reports') renderReports(); if(target==='cross') renderCross(); if(target==='mattdirect' || target==='direct') renderDirect(); if(target==='trialissuesexhibits') renderTrialIssuesExhibits(); if(target==='discovery') renderDiscovery(); if(target==='tagindex') renderDocumentTagIndex(); if(target==='outlineindex') renderOutlineIndex(); if(target==='structuredoutline') renderStructuredOutline(); }
+    function setTab(which, opts={}){ if(which === 'direct') which = 'mattdirect'; let target = views[which] ? which : 'outline'; if(target === 'mattdirect'){ try{ localStorage.setItem(getDirectPartyStorageKey(), 'matt'); }catch(e){} } if(!canCurrentUserAccessView(target)){ target = firstAllowedView(); } ui.currentView = target; document.body.classList.toggle('tagindex-active', target === 'tagindex'); document.body.classList.toggle('outlineindex-active', target === 'outlineindex'); document.body.classList.toggle('outline-screen-wide', target === 'outline'); document.body.classList.toggle('documenttable-screen-wide', target === 'documenttable' && !!ui.documentWorksheetOpen); document.body.classList.toggle('documentanalysis-screen-wide', target === 'documentanalysis'); document.body.classList.toggle('cross-screen-wide', target === 'cross'); document.body.classList.toggle('direct-screen-wide', target === 'mattdirect' || target === 'direct'); document.body.classList.toggle('discovery-screen-wide', target === 'discovery'); for(const k of Object.keys(views)){ const on = k === target; const tabEl = $(views[k].tab); const viewEl = $(views[k].view); if(tabEl) tabEl.classList.toggle('active', on); if(viewEl) viewEl.style.display = on ? 'block' : 'none'; } $('viewOutlineIndex') && ( $('viewOutlineIndex').style.display = target === 'outlineindex' ? 'block' : 'none'); $('viewStructuredOutline') && ( $('viewStructuredOutline').style.display = target === 'structuredoutline' ? 'block' : 'none'); updateViewLinks(target); if(typeof updateTrialIssuesTocVisibility === 'function') updateTrialIssuesTocVisibility(); if(opts.pushState !== false){ const params = new URLSearchParams(window.location.search); const caseId = getCaseId(); if(caseId) params.set('case', caseId); else params.delete('case'); params.set('view', target); if(target === 'documenttable' && ui.documentWorksheetOpen) params.set('worksheet', '1'); else if(target === 'elements' && ui.elementsWorksheetOpen) params.set('worksheet', '1'); else params.delete('worksheet'); history.replaceState(null, '', '?' + params.toString()); } if(target==='documents') renderDocuments(); if(target==='documenttable') renderDocumentTable(); if(target==='documentanalysis'){ ui.documentAnalysisFilterPanelOpen = false; ui.documentAnalysisVisibleCount = ui.documentAnalysisVisibleCount || 20; scheduleDocumentAnalysisRender ? scheduleDocumentAnalysisRender() : renderDocumentAnalysis(); } if(target==='exhibits') renderExhibits(); if(target==='elements') renderElements(); if(target==='timeline') renderTimeline(); if(target==='trialissues') renderTrialIssues(); if(target==='reports') renderReports(); if(target==='cross') renderCross(); if(target==='mattdirect' || target==='direct') renderDirect(); if(target==='trialissuesexhibits') renderTrialIssuesExhibits(); if(target==='discovery') renderDiscovery(); if(target==='inventory') renderInventory(); if(target==='tagindex') renderDocumentTagIndex(); if(target==='outlineindex') renderOutlineIndex(); if(target==='structuredoutline') renderStructuredOutline(); }
     $('tabOutline')?.addEventListener('click', (e)=>{ e.preventDefault(); setTab('outline'); }); $('tabDocuments')?.addEventListener('click', (e)=>{ e.preventDefault(); setTab('documents'); }); $('tabTrialIssuesExhibits')?.addEventListener('click', (e)=>{ e.preventDefault(); setTab('trialissuesexhibits'); }); $('tabDocumentAnalysis')?.addEventListener('click', (e)=>{ e.preventDefault(); setTab('documentanalysis'); }); $('tabDiscovery')?.addEventListener('click', (e)=>{ e.preventDefault(); setTab('discovery'); }); $('tabTagIndex')?.addEventListener('click', (e)=>{ e.preventDefault(); setTab('tagindex'); }); $('tabOutlineIndex')?.addEventListener('click', (e)=>{ e.preventDefault(); setTab('outlineindex'); }); $('tabStructuredOutline')?.addEventListener('click', (e)=>{ e.preventDefault(); setTab('structuredoutline'); }); $('tabExhibits')?.addEventListener('click', (e)=>{ e.preventDefault(); setTab('exhibits'); }); $('tabPeople')?.addEventListener('click', (e)=>{ e.preventDefault(); setTab('people'); }); $('tabElements')?.addEventListener('click', (e)=>{ e.preventDefault(); ui.elementsWorksheetOpen = false; setTab('elements'); }); $('tabTimeline')?.addEventListener('click', (e)=>{ e.preventDefault(); setTab('timeline'); }); $('tabTrialIssues')?.addEventListener('click', (e)=>{ e.preventDefault(); setTab('trialissues'); }); $('tabReports')?.addEventListener('click', (e)=>{ e.preventDefault(); setTab('reports'); }); $('tabCross')?.addEventListener('click', (e)=>{ e.preventDefault(); setTab('cross'); }); $('tabMattDirect')?.addEventListener('click', (e)=>{ e.preventDefault(); setTab('mattdirect'); }); $('tabSettings')?.addEventListener('click', (e)=>{ e.preventDefault(); setTab('settings'); }); $('timelineAddTagBtn')?.addEventListener('click', ()=> setTab('settings')); $('timelineInlineAddTagBtn')?.addEventListener('click', ()=> setTab('settings')); document.querySelectorAll('[data-report-type]').forEach(btn => btn.addEventListener('click', ()=> setReportType(btn.getAttribute('data-report-type')))); $('reportsPrintBtn')?.addEventListener('click', ()=> printCurrentReportToPdf()); document.addEventListener('keydown', (e)=>{ if(ui.currentView === 'reports' && (e.ctrlKey || e.metaKey) && String(e.key || '').toLowerCase() === 'p'){ e.preventDefault(); printCurrentReportToPdf(); } }); document.addEventListener('click', (e)=>{ if(!e.target.closest('.documentAnalysisControlsWrap')){ if(ui.documentAnalysisOpenControlsId){ ui.documentAnalysisOpenControlsId = ''; if(ui.currentView === 'documentanalysis') scheduleDocumentAnalysisRender ? scheduleDocumentAnalysisRender({ skipFilters:true }) : renderDocumentAnalysis({ skipFilters:true }); } } });
     document.addEventListener('click', (e)=>{ const link = e.target.closest('[data-view-link="documenttable"]'); if(!link) return; e.preventDefault(); setTab('documenttable'); });
     function escapeHtml(str){ return String(str == null ? '' : str).replace(/[&<>\"']/g, (c)=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c])); }
@@ -13124,6 +13191,126 @@ const endpoint = `${SUPABASE_URL}/functions/v1/finalize-exhibit-packet`;
   $('discoveryDocModalSave')?.addEventListener('click', saveDiscoveryDocumentModal);
   $('discoveryDocModalFile')?.addEventListener('change', () => { const file = $('discoveryDocModalFile')?.files?.[0]; if(file && $('discoveryDocModalName') && !$('discoveryDocModalName').value) $('discoveryDocModalName').value = file.name || ''; });
   $('discoveryBulkDocInput')?.addEventListener('change', handleDiscoveryBulkDocumentsSelected);
+
+
+
+
+  /* Inventory and Appraisement page */
+  const INVENTORY_STORAGE_KEY = () => `murski_inventory_${getCaseId() || 'global'}`;
+  let inventoryState = { mode:'user' };
+  function inventoryDefaultState(){ return {
+    categories:[
+      {id:uid(), name:'Financial Accounts', parentId:'', kind:'property', active:true, order:1},
+      {id:uid(), name:'Bank Accounts', parentId:'__financial__', kind:'property', active:true, order:2},
+      {id:uid(), name:'Retirement Accounts', parentId:'__financial__', kind:'property', active:true, order:3},
+      {id:uid(), name:'Vehicles', parentId:'', kind:'property', active:true, order:4},
+      {id:uid(), name:'Daily Drivers', parentId:'__vehicles__', kind:'property', active:true, order:5},
+      {id:uid(), name:'Unsecured Debts', parentId:'', kind:'debt', active:true, order:6}
+    ],
+    columns:[
+      {id:uid(), name:'Date of Value', type:'date', options:[], order:1},
+      {id:uid(), name:'Value', type:'money', options:[], order:2},
+      {id:uid(), name:'H', type:'money', options:[], order:3},
+      {id:uid(), name:'W', type:'money', options:[], order:4},
+      {id:uid(), name:'Characterization', type:'select', options:[{label:'Community', color:'#e0f2fe'},{label:'Separate', color:'#fef3c7'},{label:'Disputed', color:'#fee2e2'}], order:5}
+    ],
+    rows:[]
+  }; }
+  function inventoryNormalizeDefaultIds(state){
+    const financial = state.categories.find(c=>c.name==='Financial Accounts' && !c.parentId);
+    const vehicles = state.categories.find(c=>c.name==='Vehicles' && !c.parentId);
+    state.categories.forEach(c=>{ if(c.parentId==='__financial__') c.parentId = financial?.id || ''; if(c.parentId==='__vehicles__') c.parentId = vehicles?.id || ''; });
+    return state;
+  }
+  function loadInventoryState(){
+    try{ const raw = localStorage.getItem(INVENTORY_STORAGE_KEY()); if(raw){ return inventoryNormalizeDefaultIds(JSON.parse(raw)); } }catch(e){}
+    return inventoryNormalizeDefaultIds(inventoryDefaultState());
+  }
+  function saveInventoryState(state){ try{ localStorage.setItem(INVENTORY_STORAGE_KEY(), JSON.stringify(state)); }catch(e){} }
+  function getInventoryState(){ if(!window.__inventoryData) window.__inventoryData = loadInventoryState(); return window.__inventoryData; }
+  function setInventoryState(state){ window.__inventoryData = state; saveInventoryState(state); }
+  function inventoryEscape(s){ return String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+  function parseInventoryOptions(text){ return String(text||'').split(/\n+/).map(x=>x.trim()).filter(Boolean).map(line=>{ const parts=line.split('|'); return {label:(parts[0]||'').trim(), color:(parts[1]||'').trim() || '#ffffff'}; }).filter(o=>o.label); }
+  function flattenInventoryCategories(categories, parentId='', level=0){
+    return categories.filter(c=>(c.parentId||'')===parentId).sort((a,b)=>(a.order||0)-(b.order||0)||String(a.name).localeCompare(String(b.name))).flatMap(c=>[ {...c, level}, ...flattenInventoryCategories(categories, c.id, level+1) ]);
+  }
+  function renderInventory(){
+    const state = getInventoryState();
+    const admin = inventoryState.mode === 'admin';
+    const adminPane = $('inventoryAdminPane'), userPane = $('inventoryUserPane');
+    if(adminPane) adminPane.style.display = admin ? 'block' : 'none';
+    if(userPane) userPane.style.display = admin ? 'none' : 'block';
+    $('inventoryAdminModeBtn')?.classList.toggle('active', admin); $('inventoryUserModeBtn')?.classList.toggle('active', !admin);
+    renderInventoryAdmin(state); renderInventoryUser(state);
+  }
+  function renderInventoryAdmin(state){
+    const cats = flattenInventoryCategories(state.categories);
+    const parent = $('inventoryCategoryParent');
+    if(parent){ parent.innerHTML = `<option value="">None / top level</option>` + cats.map(c=>`<option value="${inventoryEscape(c.id)}">${'— '.repeat(c.level)}${inventoryEscape(c.name)}</option>`).join(''); }
+    const tree = $('inventoryCategoryTree');
+    if(tree){ tree.innerHTML = cats.map(c=>`<div class="inventoryCatRow" data-inventory-cat="${inventoryEscape(c.id)}"><div class="inventoryCatTop"><div><span class="inventoryIndent" style="width:${c.level*18}px"></span><span class="inventoryCatName">${inventoryEscape(c.name)}</span> <span class="pill">${inventoryEscape(c.kind||'property')}</span></div><div class="inventorySmallControls"><label class="hint"><input type="checkbox" data-inventory-cat-active="${inventoryEscape(c.id)}" ${c.active!==false?'checked':''}> active</label><button type="button" class="mini" data-inventory-cat-add-child="${inventoryEscape(c.id)}">+ child</button><button type="button" class="mini btnDanger" data-inventory-cat-delete="${inventoryEscape(c.id)}">Delete</button></div></div></div>`).join('') || '<div class="empty">No categories yet.</div>'; }
+    const cols = $('inventoryColumnsList');
+    if(cols){ cols.innerHTML = (state.columns||[]).sort((a,b)=>(a.order||0)-(b.order||0)).map(col=>`<div class="inventoryColumnCard" data-inventory-col="${inventoryEscape(col.id)}"><div style="display:flex;justify-content:space-between;gap:8px;align-items:center"><b>${inventoryEscape(col.name)}</b><span class="pill">${inventoryEscape(col.type)}</span></div>${col.type==='select'?`<div class="hint">${(col.options||[]).map(o=>`<span class="inventorySwatch" style="background:${inventoryEscape(o.color||'#fff')}"></span>${inventoryEscape(o.label)}`).join(' &nbsp; ') || 'No options yet.'}</div>`:''}<div class="inventorySmallControls"><button type="button" class="mini" data-inventory-col-up="${inventoryEscape(col.id)}">↑</button><button type="button" class="mini" data-inventory-col-down="${inventoryEscape(col.id)}">↓</button><button type="button" class="mini btnDanger" data-inventory-col-delete="${inventoryEscape(col.id)}">Delete</button></div></div>`).join('') || '<div class="empty">No columns yet.</div>'; }
+    document.querySelectorAll('[data-inventory-cat-active]').forEach(el=>el.onchange=()=>{ const st=getInventoryState(); const c=st.categories.find(x=>x.id===el.getAttribute('data-inventory-cat-active')); if(c) c.active=!!el.checked; setInventoryState(st); renderInventory(); });
+    document.querySelectorAll('[data-inventory-cat-add-child]').forEach(el=>el.onclick=()=>{ if($('inventoryCategoryParent')) $('inventoryCategoryParent').value=el.getAttribute('data-inventory-cat-add-child')||''; $('inventoryCategoryName')?.focus(); });
+    document.querySelectorAll('[data-inventory-cat-delete]').forEach(el=>el.onclick=()=>{ const id=el.getAttribute('data-inventory-cat-delete'); const st=getInventoryState(); const ids=new Set([id]); let changed=true; while(changed){ changed=false; st.categories.forEach(c=>{ if(ids.has(c.parentId) && !ids.has(c.id)){ids.add(c.id); changed=true;} }); } st.categories=st.categories.filter(c=>!ids.has(c.id)); st.rows=st.rows.filter(r=>!ids.has(r.categoryId)); setInventoryState(st); renderInventory(); });
+    document.querySelectorAll('[data-inventory-col-delete]').forEach(el=>el.onclick=()=>{ const id=el.getAttribute('data-inventory-col-delete'); const st=getInventoryState(); st.columns=st.columns.filter(c=>c.id!==id); st.rows.forEach(r=>{ if(r.cells) delete r.cells[id]; }); setInventoryState(st); renderInventory(); });
+    document.querySelectorAll('[data-inventory-col-up]').forEach(el=>el.onclick=()=>moveInventoryColumn(el.getAttribute('data-inventory-col-up'), -1));
+    document.querySelectorAll('[data-inventory-col-down]').forEach(el=>el.onclick=()=>moveInventoryColumn(el.getAttribute('data-inventory-col-down'), 1));
+  }
+  function moveInventoryColumn(id, delta){ const st=getInventoryState(); const cols=st.columns.sort((a,b)=>(a.order||0)-(b.order||0)); const i=cols.findIndex(c=>c.id===id); const j=i+delta; if(i<0||j<0||j>=cols.length) return; [cols[i].order, cols[j].order] = [cols[j].order, cols[i].order]; setInventoryState(st); renderInventory(); }
+  function renderInventoryUser(state){
+    const cats = flattenInventoryCategories(state.categories).filter(c=>c.active!==false);
+    const catSel = $('inventoryRowCategory');
+    if(catSel){ catSel.innerHTML = cats.map(c=>`<option value="${inventoryEscape(c.id)}">${'— '.repeat(c.level)}${inventoryEscape(c.name)}</option>`).join(''); }
+    const columns = (state.columns||[]).sort((a,b)=>(a.order||0)-(b.order||0));
+    const head = $('inventoryTableHead'), body = $('inventoryTableBody');
+    if(head) head.innerHTML = `<tr><th>Item</th>${columns.map(c=>`<th>${inventoryEscape(c.name)}</th>`).join('')}<th>Actions</th></tr>`;
+    if(!body) return;
+    const rows = state.rows || [];
+    if($('inventoryEmpty')) $('inventoryEmpty').style.display = rows.length ? 'none' : 'block';
+    const byCat = new Map(); rows.forEach(r=>{ if(!byCat.has(r.categoryId)) byCat.set(r.categoryId, []); byCat.get(r.categoryId).push(r); });
+    let html='';
+    cats.forEach(cat=>{
+      const catRows = byCat.get(cat.id) || [];
+      if(!catRows.length) return;
+      html += `<tr class="inventoryCategoryBand"><td colspan="${columns.length+2}">${inventoryEscape(cat.name)} ${cat.kind==='debt'?'— Debts':'— Property / Assets'}</td></tr>`;
+      catRows.forEach((row, idx)=>{
+        html += `<tr data-inventory-row="${inventoryEscape(row.id)}"><td><b>${inventoryEscape(row.name||'Untitled')}</b><div class="hint">${inventoryEscape(cat.name)}</div></td>`;
+        columns.forEach(col=>{ html += `<td>${renderInventoryCell(row, col)}</td>`; });
+        html += `<td><div class="inventoryRowActions"><button type="button" class="mini btnDanger" data-inventory-row-delete="${inventoryEscape(row.id)}">Delete row</button></div></td></tr>`;
+      });
+    });
+    body.innerHTML = html || `<tr><td colspan="${columns.length+2}"><div class="empty">No rows yet. Add a property/debt row above.</div></td></tr>`;
+    bindInventoryCellEvents();
+  }
+  function renderInventoryCell(row, col){
+    const cell = (row.cells && row.cells[col.id]) || {value:'', html:'', files:[], docIds:[]};
+    let main=''; const v = inventoryEscape(cell.value||'');
+    if(col.type==='date') main = `<input class="inventoryCellInput" type="date" value="${v}" data-inventory-cell-value="${row.id}|${col.id}">`;
+    else if(col.type==='money') main = `<input class="inventoryCellInput" type="number" step="0.01" placeholder="$0.00" value="${v}" data-inventory-cell-value="${row.id}|${col.id}">`;
+    else if(col.type==='number') main = `<input class="inventoryCellInput" type="number" value="${v}" data-inventory-cell-value="${row.id}|${col.id}">`;
+    else if(col.type==='select') main = `<select class="inventoryCellInput" data-inventory-cell-value="${row.id}|${col.id}"><option value=""></option>${(col.options||[]).map(o=>`<option value="${inventoryEscape(o.label)}" ${String(cell.value||'')===String(o.label)?'selected':''} style="background:${inventoryEscape(o.color||'#fff')}">${inventoryEscape(o.label)}</option>`).join('')}</select>`;
+    else main = `<input class="inventoryCellInput" type="text" value="${v}" data-inventory-cell-value="${row.id}|${col.id}">`;
+    const docs = Array.isArray(window.loadedDocuments) ? window.loadedDocuments : [];
+    const docOptions = docs.map(d=>`<option value="${inventoryEscape(d.id)}">${inventoryEscape(d.name || d.original_file_name || 'Document')}</option>`).join('');
+    return `<div class="inventoryCellWrap">${main}<div class="inventoryCellTools"><button type="button" data-inventory-cmd="bold"><b>B</b></button><button type="button" data-inventory-cmd="italic"><i>I</i></button><button type="button" data-inventory-cmd="underline"><u>U</u></button><button type="button" data-inventory-cmd="insertOrderedList">1.</button><button type="button" data-inventory-cmd="insertUnorderedList">•</button><button type="button" data-inventory-cmd="indent">Indent</button><button type="button" data-inventory-cmd="outdent">Outdent</button></div><div class="inventoryCellNote" contenteditable="true" data-placeholder="Notes for this cell..." data-inventory-cell-html="${row.id}|${col.id}">${cell.html||''}</div><div style="display:flex;gap:6px;flex-wrap:wrap"><input type="file" data-inventory-cell-file="${row.id}|${col.id}" multiple style="max-width:170px"><select data-inventory-cell-doc="${row.id}|${col.id}"><option value="">Attach matter document</option>${docOptions}</select></div><div class="inventoryFileList">${(cell.files||[]).map(f=>`<span>📎 ${inventoryEscape(f)}</span>`).join('')}${(cell.docIds||[]).map(id=>{ const d=docs.find(x=>x.id===id); return `<span>📄 ${inventoryEscape(d?.name || id)}</span>`; }).join('')}</div></div>`;
+  }
+  function ensureInventoryCell(st, rowId, colId){ const row=st.rows.find(r=>r.id===rowId); if(!row) return null; row.cells=row.cells||{}; row.cells[colId]=row.cells[colId]||{value:'', html:'', files:[], docIds:[]}; return row.cells[colId]; }
+  function bindInventoryCellEvents(){
+    document.querySelectorAll('[data-inventory-cell-value]').forEach(el=>el.onchange=()=>{ const [rowId,colId]=String(el.getAttribute('data-inventory-cell-value')).split('|'); const st=getInventoryState(); const cell=ensureInventoryCell(st,rowId,colId); if(cell){ cell.value=el.value; setInventoryState(st); } });
+    document.querySelectorAll('[data-inventory-cell-html]').forEach(el=>el.onblur=()=>{ const [rowId,colId]=String(el.getAttribute('data-inventory-cell-html')).split('|'); const st=getInventoryState(); const cell=ensureInventoryCell(st,rowId,colId); if(cell){ cell.html=el.innerHTML; setInventoryState(st); } });
+    document.querySelectorAll('[data-inventory-cmd]').forEach(btn=>btn.onclick=()=>{ const ed=btn.closest('.inventoryCellWrap')?.querySelector('.inventoryCellNote'); if(ed){ ed.focus(); document.execCommand(btn.getAttribute('data-inventory-cmd'), false, null); } });
+    document.querySelectorAll('[data-inventory-cell-file]').forEach(el=>el.onchange=()=>{ const [rowId,colId]=String(el.getAttribute('data-inventory-cell-file')).split('|'); const st=getInventoryState(); const cell=ensureInventoryCell(st,rowId,colId); if(cell){ cell.files=cell.files||[]; Array.from(el.files||[]).forEach(f=>cell.files.push(f.name)); setInventoryState(st); renderInventory(); } });
+    document.querySelectorAll('[data-inventory-cell-doc]').forEach(el=>el.onchange=()=>{ if(!el.value) return; const [rowId,colId]=String(el.getAttribute('data-inventory-cell-doc')).split('|'); const st=getInventoryState(); const cell=ensureInventoryCell(st,rowId,colId); if(cell){ cell.docIds=cell.docIds||[]; if(!cell.docIds.includes(el.value)) cell.docIds.push(el.value); setInventoryState(st); renderInventory(); } });
+    document.querySelectorAll('[data-inventory-row-delete]').forEach(el=>el.onclick=()=>{ const id=el.getAttribute('data-inventory-row-delete'); const st=getInventoryState(); st.rows=st.rows.filter(r=>r.id!==id); setInventoryState(st); renderInventory(); });
+  }
+  $('inventoryUserModeBtn')?.addEventListener('click', ()=>{ inventoryState.mode='user'; renderInventory(); });
+  $('inventoryAdminModeBtn')?.addEventListener('click', ()=>{ inventoryState.mode='admin'; renderInventory(); });
+  $('inventoryAddCategoryBtn')?.addEventListener('click', ()=>{ const name=($('inventoryCategoryName')?.value||'').trim(); if(!name) return alert('Enter a category name.'); const st=getInventoryState(); st.categories.push({id:uid(), name, parentId:$('inventoryCategoryParent')?.value||'', kind:$('inventoryCategoryKind')?.value||'property', active:true, order:Date.now()}); setInventoryState(st); if($('inventoryCategoryName')) $('inventoryCategoryName').value=''; renderInventory(); });
+  $('inventoryAddColumnBtn')?.addEventListener('click', ()=>{ const name=($('inventoryColumnName')?.value||'').trim(); if(!name) return alert('Enter a column name.'); const type=$('inventoryColumnType')?.value||'text'; const st=getInventoryState(); st.columns.push({id:uid(), name, type, options:type==='select'?parseInventoryOptions($('inventoryColumnOptions')?.value||''):[], order:Date.now()}); setInventoryState(st); if($('inventoryColumnName')) $('inventoryColumnName').value=''; if($('inventoryColumnOptions')) $('inventoryColumnOptions').value=''; renderInventory(); });
+  $('inventoryAddRowBtn')?.addEventListener('click', ()=>{ const name=($('inventoryRowName')?.value||'').trim(); const catId=$('inventoryRowCategory')?.value||''; if(!catId) return alert('Add or choose a category first.'); if(!name) return alert('Enter an item name.'); const st=getInventoryState(); st.rows.push({id:uid(), categoryId:catId, name, cells:{}, order:Date.now()}); setInventoryState(st); if($('inventoryRowName')) $('inventoryRowName').value=''; renderInventory(); });
+  window.renderInventory = renderInventory;
 
 
   initializeCaseChatUi();
