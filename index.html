@@ -11854,21 +11854,22 @@ const endpoint = `${SUPABASE_URL}/functions/v1/finalize-exhibit-packet`;
     discoveryState.rapidFilterBySet = discoveryState.rapidFilterBySet || {};
     return String(discoveryState.rapidFilterBySet[setId] || '');
   }
-  function rapidDiscoveryUploadDate(doc){ return String(doc?.created_at || doc?.uploaded_at || doc?.updated_at || doc?.doc_date || '').slice(0,10); }
+  function rapidDiscoveryUploadDate(doc){
+    const worksheetDate = (typeof getDocumentUploadDate === 'function') ? getDocumentUploadDate(doc) : '';
+    return String(worksheetDate || doc?.createdAt || doc?.created_at || doc?.uploaded_at || doc?.updated_at || doc?.doc_date || '').slice(0,10);
+  }
   function openRapidDiscoveryWorksheet(setId){
     const url = new URL(window.location.href);
     const caseId = getCaseId();
     if(caseId) url.searchParams.set('case', caseId);
     url.searchParams.set('view', 'discovery');
     url.searchParams.set('rapidSet', String(setId || ''));
+    url.searchParams.set('rapidOnly', '1');
     url.searchParams.delete('worksheet');
     const opened = window.open(url.toString(), '_blank');
     try { if(opened) opened.opener = null; } catch(e){}
     if(!opened){
-      discoveryState.rapidOpenBySet = discoveryState.rapidOpenBySet || {};
-      discoveryState.rapidOpenBySet[setId] = true;
-      saveDiscoveryLocal();
-      renderDiscoveryClientList();
+      window.location.href = url.toString();
     }
   }
   function closeRapidDiscoveryWorksheet(setId){
@@ -11958,7 +11959,9 @@ const endpoint = `${SUPABASE_URL}/functions/v1/finalize-exhibit-packet`;
     try { return String(new URLSearchParams(window.location.search || '').get('rapidSet') || ''); } catch(e){ return ''; }
   }
   function isRapidDiscoveryStandaloneWindow(setId){
-    return getRapidDiscoverySetIdFromUrl() && String(getRapidDiscoverySetIdFromUrl()) === String(setId || '');
+    const urlSetId = getRapidDiscoverySetIdFromUrl();
+    const rapidOnly = (() => { try { return new URLSearchParams(window.location.search || '').get('rapidOnly') === '1'; } catch(e){ return false; } })();
+    return !!urlSetId && String(urlSetId) === String(setId || '') && rapidOnly;
   }
   function rapidDiscoveryFilteredByDocumentWorksheet(doc){
     if(!documentMatchesHierFilter(doc)) return false;
@@ -12702,6 +12705,44 @@ const endpoint = `${SUPABASE_URL}/functions/v1/finalize-exhibit-packet`;
 
   async function renderDiscovery(){
     if(!discoveryState.loaded) await loadDiscoveryData();
+    const rapidSetId = getRapidDiscoverySetIdFromUrl();
+    const rapidOnly = (() => { try { return new URLSearchParams(window.location.search || '').get('rapidOnly') === '1'; } catch(e){ return false; } })();
+    if(rapidSetId && rapidOnly){
+      const set = getDiscoverySetById(rapidSetId);
+      if(set) discoveryState.selectedSetId = set.id;
+      const attorneyPane = $('discoveryAttorneyPane'); const clientPane = $('discoveryClientPane'); const completionPane = $('discoveryCompletionPane');
+      if(attorneyPane) attorneyPane.style.display = 'none';
+      if(completionPane) completionPane.style.display = 'none';
+      if(clientPane) clientPane.style.display = 'grid';
+      const modeBar = document.querySelector('#viewDiscovery .discoveryModeBar');
+      if(modeBar) modeBar.style.display = 'none';
+      const dashboard = document.querySelector('#viewDiscovery .discoveryDashboardCard');
+      if(dashboard) dashboard.style.display = 'none';
+      if($('discoveryClientSelectedPill')) $('discoveryClientSelectedPill').textContent = set ? `Rapid worksheet: ${set.title || 'Untitled'}` : 'Rapid worksheet';
+      const clientPaneTitle = clientPane ? clientPane.querySelector('h2') : null;
+      if(clientPaneTitle) clientPaneTitle.textContent = 'Rapid Discovery Responses';
+      const clientHint = clientPane ? clientPane.querySelector('.hint') : null;
+      if(clientHint) clientHint.textContent = 'Assign already-added matter documents to RFP requests. This page is separate from the normal response page.';
+      const host = $('discoveryClientList');
+      if(host){
+        if(set) host.innerHTML = renderRapidDiscoveryResponses(set);
+        else host.innerHTML = '<div class="empty">Could not find that discovery set.</div>';
+        host.querySelectorAll('[data-rapid-close]').forEach(btn => btn.addEventListener('click', () => closeRapidDiscoveryWorksheet(btn.getAttribute('data-rapid-close'))));
+        host.querySelectorAll('[data-rapid-reset]').forEach(btn => btn.addEventListener('click', () => resetRapidDiscoveryPick(btn.getAttribute('data-rapid-reset'))));
+        host.querySelectorAll('[data-rapid-filter]').forEach(input => input.addEventListener('input', () => setRapidDiscoveryFilter(input.getAttribute('data-rapid-filter'), input.value || '')));
+        host.querySelectorAll('[data-rapid-select-all]').forEach(btn => btn.addEventListener('click', () => selectRapidDiscoveryRows(btn.getAttribute('data-rapid-select-all'), true)));
+        host.querySelectorAll('[data-rapid-deselect-all]').forEach(btn => btn.addEventListener('click', () => selectRapidDiscoveryRows(btn.getAttribute('data-rapid-deselect-all'), false)));
+        host.querySelectorAll('[data-rapid-remove-rows]').forEach(btn => btn.addEventListener('click', () => removeRapidDiscoveryRows(btn.getAttribute('data-rapid-remove-rows'))));
+        host.querySelectorAll('[data-rapid-sort]').forEach(btn => btn.addEventListener('click', () => setRapidDiscoverySort(btn.getAttribute('data-rapid-sort'), btn.getAttribute('data-sort-next'))));
+        bindRapidDiscoveryDocumentFilters(host);
+        host.querySelectorAll('[data-rapid-assign-doc]').forEach(btn => btn.addEventListener('click', () => attachExistingMatterDocumentToDiscoveryRequest(btn.getAttribute('data-rapid-assign-req'), btn.getAttribute('data-rapid-assign-doc'))));
+      }
+      return;
+    }
+    const modeBar = document.querySelector('#viewDiscovery .discoveryModeBar');
+    if(modeBar) modeBar.style.display = '';
+    const dashboard = document.querySelector('#viewDiscovery .discoveryDashboardCard');
+    if(dashboard) dashboard.style.display = '';
     const attorneyAllowed = typeof canCurrentUserUseAdminOnlyTools === 'function' ? canCurrentUserUseAdminOnlyTools() : true;
     if(discoveryState.mode === 'completion') discoveryState.mode = attorneyAllowed ? 'attorney' : 'client';
     if(!attorneyAllowed && discoveryState.mode === 'attorney') discoveryState.mode = 'client';
