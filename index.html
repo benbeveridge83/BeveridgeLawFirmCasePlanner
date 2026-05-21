@@ -12739,6 +12739,8 @@ const endpoint = `${SUPABASE_URL}/functions/v1/finalize-exhibit-packet`;
     $('discoveryClientSelectedPill') && ($('discoveryClientSelectedPill').textContent = set ? `${getDiscoveryLabel(set.discovery_type)}: ${set.title || 'Untitled'}` : 'No set selected');
     if(!set){ host.innerHTML = '<div class="empty">No discovery set selected.</div>'; return; }
     const reqs = discoveryRequestsForSet(set.id, true);
+    const discoveryNumberedNames = new Map(discoveryUploadedDocumentRows(set).map(row => [discoveryFileStableKey(row.file), row.defaultName]));
+    const discoveryNameForClientFile = (file, req) => discoveryNumberedNames.get(discoveryFileStableKey(file)) || discoveryDownloadNameForRow(set, req, file, null);
     const instructions = String(set.client_instructions || discoveryInstructionHtmlFor(set.discovery_type) || '').trim();
     const topInstructions = `<div class="discoveryInstructionsBox"><div class="label">Attorney instructions</div><div class="discoveryReqText">${instructions || 'None'}</div></div>${renderRapidDiscoveryResponses(set)}`;
     host.innerHTML = topInstructions + (reqs.length ? reqs.map(req => {
@@ -12750,7 +12752,7 @@ const endpoint = `${SUPABASE_URL}/functions/v1/finalize-exhibit-packet`;
       const noAnswerNotice = !required ? '<div class="setupBox">Your attorney has marked this request as not requiring a client response. Review the request and attorney comments, but you do not need to answer it unless your attorney asks you to.</div>' : '';
       const needsHelp = getDiscoveryNeedHelp(req.id);
       const rfpNeedsPrior = resp.rfp_status === 'The requested items were attached to a prior response';
-      return `<div class="discoveryRequestRow ${!required ? 'discoveryNoAnswerNeeded' : ''} ${needsHelp ? 'discoveryNeedsHelp' : ''}"><div class="discoveryRequestTop"><div class="discoveryReqNumber">${escapeHtml(getDiscoveryLabel(req.request_type))} ${escapeHtml(req.request_number || '')}</div><span class="hint">${required ? 'Response required' : 'No response required'} • Files: ${files.length}</span></div><div class="discoveryReqText">${escapeHtml(req.request_text || '')}</div><div class="discoveryInstructionsBox discoveryAttorneyCommentBox"><div class="label">Attorney's Comments:</div><div class="discoveryReqText">${attyNotes ? escapeHtml(attyNotes) : 'None'}</div></div>${noAnswerNotice}${isRfp ? `<div><div class="label">Response</div><select data-discovery-rfp-status="${escapeHtml(req.id)}" ${!required ? 'disabled' : ''}><option value="">Choose response...</option>${DISCOVERY_RFP_OPTIONS.map(opt => `<option value="${escapeHtml(opt)}" ${resp.rfp_status === opt ? 'selected' : ''}>${escapeHtml(opt)}</option>`).join('')}</select></div>${rfpNeedsPrior ? `<div><div class="label">Which prior response were the requested items attached to?</div><textarea data-discovery-rfp-upload-notes="${escapeHtml(req.id)}" placeholder="Example: Attached to prior RFP response served on 05/01/2026, Request No. 4.">${escapeHtml(resp.rfp_upload_notes || '')}</textarea></div>` : ''}` : `<div><div class="label">Your answer</div><textarea data-discovery-client-response="${escapeHtml(req.id)}" placeholder="Type your answer here" ${!required ? 'disabled' : ''}>${escapeHtml(resp.client_response || '')}</textarea></div>`}<div><div class="label">Questions / comments to your attorney</div><textarea data-discovery-client-comments="${escapeHtml(req.id)}" placeholder="Ask your attorney a question or explain anything you are unsure about">${escapeHtml(resp.client_comments || '')}</textarea></div><div class="row"><button type="button" class="${needsHelp ? 'btnDanger' : 'btnGhost'}" data-discovery-need-help="${escapeHtml(req.id)}">Need Help</button></div><div><div class="label">Upload files for this request</div><button type="button" class="btnPrimary discoveryUploadButton" data-discovery-open-upload="${escapeHtml(req.id)}">Upload document</button> <button type="button" class="btnGhost discoveryUploadButton" data-discovery-open-bulk-upload="${escapeHtml(req.id)}">Upload Multiple Documents</button></div><div class="discoveryFileList">${files.length ? files.map(f => `<div class="discoveryFilePill"><span>${escapeHtml(f.file_name || 'File')}</span>${f.file_path ? `<a target="_blank" rel="noopener" href="${escapeHtml(getDocumentPublicUrl(f.file_path))}">Open</a>` : '<span class="hint">local only</span>'}</div>`).join('') : '<div class="hint">No files uploaded for this request yet.</div>'}</div></div>`;
+      return `<div class="discoveryRequestRow ${!required ? 'discoveryNoAnswerNeeded' : ''} ${needsHelp ? 'discoveryNeedsHelp' : ''}"><div class="discoveryRequestTop"><div class="discoveryReqNumber">${escapeHtml(getDiscoveryLabel(req.request_type))} ${escapeHtml(req.request_number || '')}</div><span class="hint">${required ? 'Response required' : 'No response required'} • Files: ${files.length}</span></div><div class="discoveryReqText">${escapeHtml(req.request_text || '')}</div><div class="discoveryInstructionsBox discoveryAttorneyCommentBox"><div class="label">Attorney's Comments:</div><div class="discoveryReqText">${attyNotes ? escapeHtml(attyNotes) : 'None'}</div></div>${noAnswerNotice}${isRfp ? `<div><div class="label">Response</div><select data-discovery-rfp-status="${escapeHtml(req.id)}" ${!required ? 'disabled' : ''}><option value="">Choose response...</option>${DISCOVERY_RFP_OPTIONS.map(opt => `<option value="${escapeHtml(opt)}" ${resp.rfp_status === opt ? 'selected' : ''}>${escapeHtml(opt)}</option>`).join('')}</select></div>${rfpNeedsPrior ? `<div><div class="label">Which prior response were the requested items attached to?</div><textarea data-discovery-rfp-upload-notes="${escapeHtml(req.id)}" placeholder="Example: Attached to prior RFP response served on 05/01/2026, Request No. 4.">${escapeHtml(resp.rfp_upload_notes || '')}</textarea></div>` : ''}` : `<div><div class="label">Your answer</div><textarea data-discovery-client-response="${escapeHtml(req.id)}" placeholder="Type your answer here" ${!required ? 'disabled' : ''}>${escapeHtml(resp.client_response || '')}</textarea></div>`}<div><div class="label">Questions / comments to your attorney</div><textarea data-discovery-client-comments="${escapeHtml(req.id)}" placeholder="Ask your attorney a question or explain anything you are unsure about">${escapeHtml(resp.client_comments || '')}</textarea></div><div class="row"><button type="button" class="${needsHelp ? 'btnDanger' : 'btnGhost'}" data-discovery-need-help="${escapeHtml(req.id)}">Need Help</button></div><div><div class="label">Upload files for this request</div><button type="button" class="btnPrimary discoveryUploadButton" data-discovery-open-upload="${escapeHtml(req.id)}">Upload document</button> <button type="button" class="btnGhost discoveryUploadButton" data-discovery-open-bulk-upload="${escapeHtml(req.id)}">Upload Multiple Documents</button></div><div class="discoveryFileList">${files.length ? files.map(f => `<div class="discoveryFilePill"><span>${escapeHtml(discoveryNameForClientFile(f, req))}</span>${f.file_path ? `<a target="_blank" rel="noopener" href="${escapeHtml(getDocumentPublicUrl(f.file_path))}">Open</a>` : '<span class="hint">local only</span>'}</div>`).join('') : '<div class="hint">No files uploaded for this request yet.</div>'}</div></div>`;
     }).join('') : '<div class="empty">There are no requests in this discovery set.</div>');
     host.querySelectorAll('[data-discovery-client-response]').forEach(el => el.addEventListener('blur', () => updateDiscoveryResponse(el.getAttribute('data-discovery-client-response'), { client_response:el.value || '' })));
     host.querySelectorAll('[data-discovery-client-comments]').forEach(el => el.addEventListener('blur', () => updateDiscoveryResponse(el.getAttribute('data-discovery-client-comments'), { client_comments:el.value || '' })));
@@ -12870,6 +12872,9 @@ const endpoint = `${SUPABASE_URL}/functions/v1/finalize-exhibit-packet`;
     const doc = discoveryDocumentForDiscoveryFile(file);
     return String(doc?.name || file?.document_name || file?.doc_name || file?.name || file?.file_name || 'Document').trim() || 'Document';
   }
+  function discoveryFileStableKey(file){
+    return String(file?.id || file?.file_id || file?.fileId || file?.file_path || file?.filePath || file?.path || file?.file_name || file?.name || '');
+  }
   function discoveryNameExtensionForFile(file, url=''){
     return discoveryKnownFileExtension(file || {}, url || file?.file_path || '') || discoveryExtensionFromPathOrUrl(file?.file_name || file?.file_path || url || '');
   }
@@ -12888,7 +12893,8 @@ const endpoint = `${SUPABASE_URL}/functions/v1/finalize-exhibit-packet`;
   function prefixedDiscoveryFileName(set, req, originalName){ return discoveryDocumentDefaultDownloadName(set, req, { file_name: originalName || 'file' }); }
   function discoveryWordBlob(set, includeAttorneyNotes=true){
     const reqs = discoveryRequestsForSet(set.id, true);
-    const rows = reqs.map(req => { const resp = getDiscoveryResponse(req.id); const files = discoveryFilesForRequest(req.id); const answer = normalizeDiscoveryType(req.request_type) === 'production' ? (resp.rfp_status || '') : (resp.client_response || ''); return `<h3>${escapeHtml(getDiscoveryLabel(req.request_type))} No. ${escapeHtml(req.request_number || '')}</h3><p><b>Request:</b> ${escapeHtml(req.request_text || '')}</p><p><b>Response required:</b> ${discoveryRequestRequiresResponse(req) ? 'Yes' : 'No'}</p><p><b>Attorney comments to client:</b> ${escapeHtml(req.attorney_notes || 'None')}</p><p><b>Client response:</b> ${escapeHtml(answer || '')}</p>${resp.rfp_upload_notes ? `<p><b>Uploaded-to note:</b> ${escapeHtml(resp.rfp_upload_notes)}</p>` : ''}${includeAttorneyNotes ? `<p><b>Notes to attorney:</b> ${escapeHtml(resp.client_comments || '')}</p>` : ''}<p><b>Files:</b> ${files.map(f => escapeHtml(f.file_name || '')).join(', ') || 'None'}</p><hr>`; }).join('');
+    const discoveryNumberedNames = new Map(discoveryUploadedDocumentRows(set).map(row => [discoveryFileStableKey(row.file), row.defaultName]));
+    const rows = reqs.map(req => { const resp = getDiscoveryResponse(req.id); const files = discoveryFilesForRequest(req.id); const answer = normalizeDiscoveryType(req.request_type) === 'production' ? (resp.rfp_status || '') : (resp.client_response || ''); return `<h3>${escapeHtml(getDiscoveryLabel(req.request_type))} No. ${escapeHtml(req.request_number || '')}</h3><p><b>Request:</b> ${escapeHtml(req.request_text || '')}</p><p><b>Response required:</b> ${discoveryRequestRequiresResponse(req) ? 'Yes' : 'No'}</p><p><b>Attorney comments to client:</b> ${escapeHtml(req.attorney_notes || 'None')}</p><p><b>Client response:</b> ${escapeHtml(answer || '')}</p>${resp.rfp_upload_notes ? `<p><b>Uploaded-to note:</b> ${escapeHtml(resp.rfp_upload_notes)}</p>` : ''}${includeAttorneyNotes ? `<p><b>Notes to attorney:</b> ${escapeHtml(resp.client_comments || '')}</p>` : ''}<p><b>Files:</b> ${files.map(f => escapeHtml(discoveryNumberedNames.get(discoveryFileStableKey(f)) || f.file_name || '')).join(', ') || 'None'}</p><hr>`; }).join('');
     const html = `<!doctype html><html><head><meta charset="utf-8"><title>${escapeHtml(set.title || 'Discovery Responses')}</title></head><body><h1>${escapeHtml(set.title || 'Discovery Responses')}</h1><p><b>Type:</b> ${escapeHtml(getDiscoveryLabel(set.discovery_type))}</p><p><b>Date served/received:</b> ${escapeHtml(formatDateForDisplay(set.date_received || '') || '')}</p><p><b>Client due:</b> ${escapeHtml(formatDateForDisplay(set.client_due_date || '') || '')}</p><h2>Attorney instructions</h2><p>${escapeHtml(set.client_instructions || 'None')}</p>${rows}</body></html>`;
     return new Blob([html], { type:'application/msword' });
   }
@@ -12909,6 +12915,7 @@ const endpoint = `${SUPABASE_URL}/functions/v1/finalize-exhibit-packet`;
     reqs.forEach(req => discoveryFilesForRequest(req.id).filter(f => f.file_path).forEach(f => rows.push({ req, file:f, url:getDocumentPublicUrl(f.file_path) })));
     rows.forEach((row, idx) => {
       row.appearanceNumber = idx + 1;
+      row.key = discoveryFileStableKey(row.file);
       row.displayName = `${idx + 1}. ${discoveryDocumentDisplayName(row.file)}`;
       row.defaultName = discoveryDownloadNameForRow(set, row.req, row.file, row.appearanceNumber);
     });
@@ -12918,11 +12925,12 @@ const endpoint = `${SUPABASE_URL}/functions/v1/finalize-exhibit-packet`;
     const set = getDiscoverySetById(setId);
     if(!set){ alert('Select a discovery set first.'); return; }
     const reqs = discoveryRequestsForSet(set.id, true);
+    const uploadedRows = discoveryUploadedDocumentRows(set);
     const win = window.open('', '_blank', 'width=1100,height=800,scrollbars=yes,resizable=yes');
     if(!win){ alert('Please allow popups to view uploaded documents.'); return; }
     const sections = reqs.map(req => {
-      const files = discoveryFilesForRequest(req.id).filter(f => f.file_path);
-      return `<section style="border:1px solid #e2e8f0;border-radius:14px;padding:14px;margin:12px 0;background:#fff"><h2 style="margin:0 0 8px 0">Request ${escapeHtml(req.request_number || '')}</h2><div style="white-space:pre-wrap;margin-bottom:10px">${escapeHtml(req.request_text || '')}</div>${files.length ? `<ul>${files.map(f => { const u = getDocumentPublicUrl(f.file_path); return `<li><a target="_blank" href="${escapeHtml(u)}">${escapeHtml(ensureDiscoveryDownloadExtension(f.file_name || 'Document', f, u))}</a></li>`; }).join('')}</ul>` : '<p style="color:#64748b">No documents uploaded for this request.</p>'}</section>`;
+      const rows = uploadedRows.filter(row => String(row.req?.id || '') === String(req.id || ''));
+      return `<section style="border:1px solid #e2e8f0;border-radius:14px;padding:14px;margin:12px 0;background:#fff"><h2 style="margin:0 0 8px 0">Request ${escapeHtml(req.request_number || '')}</h2><div style="white-space:pre-wrap;margin-bottom:10px">${escapeHtml(req.request_text || '')}</div>${rows.length ? `<ul>${rows.map(row => `<li><a target="_blank" href="${escapeHtml(row.url)}">${escapeHtml(row.defaultName)}</a></li>`).join('')}</ul>` : '<p style="color:#64748b">No documents uploaded for this request.</p>'}</section>`;
     }).join('');
     win.document.open();
     win.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>Uploaded discovery documents</title><style>body{font-family:Arial,sans-serif;margin:24px;color:#0f172a}button{border:1px solid #e2e8f0;border-radius:999px;background:#2563eb;color:white;padding:10px 14px;font-weight:700;cursor:pointer}.hint{color:#64748b}</style></head><body><h1>Uploaded documents</h1><p class="hint">${escapeHtml(set.title || '')}</p><button onclick="window.opener.openDiscoveryDocumentDownloadWindow('${escapeHtml(set.id)}')">Download documents</button>${sections}</body></html>`);
@@ -12930,14 +12938,16 @@ const endpoint = `${SUPABASE_URL}/functions/v1/finalize-exhibit-packet`;
   }
   function discoveryLogRowsForSet(set){
     if(!set) return [];
-    return discoveryRequestsForSet(set.id, true).map(req => {
-      const files = discoveryFilesForRequest(req.id).filter(f => f.file_path);
-      const fileNames = files.map(f => {
-        const u = getDocumentPublicUrl(f.file_path);
-        return ensureDiscoveryDownloadExtension(f.file_name || 'Document', f, u);
-      });
-      return { discoveryName: set.title || 'Discovery request', requestNumber: `Request ${req.request_number || ''}`, fileNames };
-    }).filter(row => row.fileNames.length);
+    const grouped = new Map();
+    discoveryUploadedDocumentRows(set).forEach(row => {
+      const req = row.req || {};
+      const key = String(req.id || row.file?.request_id || row.file?.requestId || row.request_id || '');
+      if(!grouped.has(key)){
+        grouped.set(key, { discoveryName: set.title || 'Discovery request', requestNumber: `Request ${req.request_number || ''}`, fileNames: [] });
+      }
+      grouped.get(key).fileNames.push(row.defaultName);
+    });
+    return Array.from(grouped.values()).filter(row => row.fileNames.length);
   }
   function discoveryCsvEscape(value){ return `"${String(value ?? '').replace(/"/g, '""')}"`; }
   function downloadDiscoveryLogCsv(setId){
