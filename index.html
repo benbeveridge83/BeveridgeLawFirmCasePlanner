@@ -1712,7 +1712,15 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_KEY, {
     .rapidDiscoveryTable th.rapidDiscoveryRemoveHead,.rapidDiscoveryTable td.rapidDiscoveryRemoveCell{position:sticky;left:0;z-index:4;background:#fff;}
     .rapidDiscoveryTable thead th.rapidDiscoveryRemoveHead{background:#f8fbff;z-index:6;}
     .rapidDiscoveryTable th.rapidDiscoveryDocHead,.rapidDiscoveryTable td.rapidDiscoveryDocCell{position:sticky;left:58px;background:#fff;z-index:3;min-width:260px;}
-    .rapidDiscoveryTable thead th.rapidDiscoveryDocHead{background:#f8fbff;z-index:5;}
+    .rapidDiscoveryTable thead th.rapidDiscoveryDocHead{background:#f8fbff;z-index:7;}
+    .rapidDiscoveryTableWrap{max-height:calc(100vh - 360px);overflow:auto;position:relative;scrollbar-gutter:stable both-edges;}
+    .rapidDiscoveryTable thead th{position:sticky;top:0;z-index:5;background:#f8fbff;}
+    .rapidDiscoveryTable th.rapidDiscoveryRemoveHead,.rapidDiscoveryTable td.rapidDiscoveryRemoveCell{position:sticky;left:0;z-index:6;background:#fff;box-shadow:1px 0 0 var(--border);}
+    .rapidDiscoveryTable th.rapidDiscoveryDocHead,.rapidDiscoveryTable td.rapidDiscoveryDocCell{position:sticky;left:58px;z-index:5;background:#fff;box-shadow:1px 0 0 var(--border);}
+    .rapidDiscoveryTable thead th.rapidDiscoveryRemoveHead{z-index:9;background:#f8fbff;}
+    .rapidDiscoveryTable thead th.rapidDiscoveryDocHead{z-index:8;background:#f8fbff;}
+    .rapidDiscoveryFilterPanel{margin-top:10px;border:1px solid var(--border);border-radius:14px;background:#fff;padding:10px;}
+    .rapidDiscoveryWindowNotice{display:inline-flex;align-items:center;gap:8px;border:1px solid rgba(37,99,235,.20);background:#f8fbff;border-radius:999px;padding:6px 10px;font-size:12px;font-weight:800;color:var(--brand2);}
 
     .discoveryFileList{display:grid;gap:6px;}
     .discoveryFilePill{display:flex;justify-content:space-between;gap:8px;align-items:center;border:1px solid var(--border);border-radius:999px;background:var(--surface2);padding:6px 10px;font-size:12px;font-weight:800;}
@@ -11848,12 +11856,23 @@ const endpoint = `${SUPABASE_URL}/functions/v1/finalize-exhibit-packet`;
   }
   function rapidDiscoveryUploadDate(doc){ return String(doc?.created_at || doc?.uploaded_at || doc?.updated_at || doc?.doc_date || '').slice(0,10); }
   function openRapidDiscoveryWorksheet(setId){
-    discoveryState.rapidOpenBySet = discoveryState.rapidOpenBySet || {};
-    discoveryState.rapidOpenBySet[setId] = true;
-    saveDiscoveryLocal();
-    renderDiscoveryClientList();
+    const url = new URL(window.location.href);
+    const caseId = getCaseId();
+    if(caseId) url.searchParams.set('case', caseId);
+    url.searchParams.set('view', 'discovery');
+    url.searchParams.set('rapidSet', String(setId || ''));
+    url.searchParams.delete('worksheet');
+    const opened = window.open(url.toString(), '_blank');
+    try { if(opened) opened.opener = null; } catch(e){}
+    if(!opened){
+      discoveryState.rapidOpenBySet = discoveryState.rapidOpenBySet || {};
+      discoveryState.rapidOpenBySet[setId] = true;
+      saveDiscoveryLocal();
+      renderDiscoveryClientList();
+    }
   }
   function closeRapidDiscoveryWorksheet(setId){
+    if(isRapidDiscoveryStandaloneWindow(setId)){ window.close(); return; }
     discoveryState.rapidOpenBySet = discoveryState.rapidOpenBySet || {};
     discoveryState.rapidOpenBySet[setId] = false;
     saveDiscoveryLocal();
@@ -11935,6 +11954,77 @@ const endpoint = `${SUPABASE_URL}/functions/v1/finalize-exhibit-packet`;
       renderDiscovery();
     }
   }
+  function getRapidDiscoverySetIdFromUrl(){
+    try { return String(new URLSearchParams(window.location.search || '').get('rapidSet') || ''); } catch(e){ return ''; }
+  }
+  function isRapidDiscoveryStandaloneWindow(setId){
+    return getRapidDiscoverySetIdFromUrl() && String(getRapidDiscoverySetIdFromUrl()) === String(setId || '');
+  }
+  function rapidDiscoveryFilteredByDocumentWorksheet(doc){
+    if(!documentMatchesHierFilter(doc)) return false;
+    if(!elementMatchesIdFilter(documentMatchesSimpleFilter(doc, 'exhibit'), ui.documentTableExhibitIds, ui.documentTableExhibitExcludeIds, !!ui.documentTableExhibitNoneSelected, ui.documentTableExhibitExcludeNoneSelected !== false)) return false;
+    if(!elementMatchesIdFilter(documentMatchesSimpleFilter(doc, 'timeline'), ui.documentTableTimelineIds, ui.documentTableTimelineExcludeIds, !!ui.documentTableTimelineNoneSelected, ui.documentTableTimelineExcludeNoneSelected !== false)) return false;
+    if(!elementMatchesIdFilter(documentMatchesSimpleFilter(doc, 'file'), ui.documentTableFileIds, ui.documentTableFileExcludeIds, !!ui.documentTableFileNoneSelected, ui.documentTableFileExcludeNoneSelected !== false)) return false;
+    if(!elementMatchesIdFilter([normalizeDocumentStatusValue(doc.status)], ui.documentTableStatusIds, ui.documentTableStatusExcludeIds, !!ui.documentTableStatusNoneSelected, ui.documentTableStatusExcludeNoneSelected !== false)) return false;
+    const typeIds = Array.isArray(ui.documentTableTypeIds) ? ui.documentTableTypeIds : [];
+    if(typeIds.length && !typeIds.includes(getDocumentTypeLabel(doc))) return false;
+    return true;
+  }
+  function rapidSimpleFilterMarkup(items, includeIds, excludeIds, includeNoneSelected, excludeNoneSelected, kind){
+    const allItems = Array.isArray(items) ? items.slice() : [];
+    const includeSet = new Set(includeIds || []);
+    const excludeSet = new Set(excludeIds || []);
+    const ordered = allItems.slice().sort((a,b)=>{
+      const aSel = includeSet.has(a.id) ? 0 : 1;
+      const bSel = includeSet.has(b.id) ? 0 : 1;
+      if(aSel !== bSel) return aSel - bSel;
+      return (a.name || '').localeCompare(b.name || '');
+    });
+    if(!allItems.length) return '<div class="hint">No options.</div>';
+    return `<div class="elementsFilterDual"><div><div class="label" style="margin-bottom:6px">Filter-inclusion</div><div class="elementsFilterChecklist"><label class="checkItem" style="margin:0"><input type="checkbox" data-rapid-filter-none-include="${escapeHtml(kind)}" ${includeNoneSelected ? 'checked' : ''} /> <span>none selected</span></label>${ordered.map(item => `<label class="checkItem" style="margin:0"><input type="checkbox" data-rapid-filter-include="${escapeHtml(kind)}" value="${escapeHtml(item.id)}" ${includeSet.has(item.id) ? 'checked' : ''} /> <span>${escapeHtml(item.name || 'Untitled')}</span></label>`).join('')}</div></div><div><div class="label" style="margin-bottom:6px">Filter exclusion</div><div class="elementsFilterChecklist"><label class="checkItem" style="margin:0"><input type="checkbox" data-rapid-filter-none-exclude="${escapeHtml(kind)}" ${excludeNoneSelected ? 'checked' : ''} /> <span>none selected</span></label>${allItems.map(item => `<label class="checkItem" style="margin:0"><input type="checkbox" data-rapid-filter-exclude="${escapeHtml(kind)}" value="${escapeHtml(item.id)}" ${excludeSet.has(item.id) ? '' : 'checked'} /> <span>${escapeHtml(item.name || 'Untitled')}</span></label>`).join('')}</div></div></div>`;
+  }
+  function renderRapidDiscoveryFilterPanel(setId){
+    if(!((discoveryState.rapidFilterPanelOpenBySet || {})[setId])) return '';
+    const items = getDocumentTableFilterItems();
+    const typeOptions = getDocumentTableTypeOptions();
+    const selectedTypeSet = new Set(Array.isArray(ui.documentTableTypeIds) && ui.documentTableTypeIds.length ? ui.documentTableTypeIds : typeOptions.map(item => item.id));
+    const tagIncludeTree = renderTagTreeMarkup(ui.documentTableTagIds || [], { inputAttr:'data-rapid-tag-include', rootClass:'elementsFilterTagTree', emptyMessage:'No tags yet.', collapsedMap: ui.documentTableCollapsedTagNodes || {} });
+    const tagExcludeTree = renderTagTreeMarkup(ui.documentTableTagExcludeIds || [], { inputAttr:'data-rapid-tag-exclude', rootClass:'elementsFilterTagTree', emptyMessage:'No tags yet.', collapsedMap: ui.documentTableCollapsedTagNodes || {} });
+    return `<div class="rapidDiscoveryFilterPanel"><div class="hint" style="margin-bottom:8px">Use the same inclusion and exclusion style as the Document Worksheet.</div><div class="elementsFilterGrid"><div><div class="label">Tags / subtags</div><div class="elementsFilterDual"><div><div class="label" style="margin-bottom:6px">Filter-inclusion</div><div class="elementsFilterChecklist"><label class="checkItem" style="margin:0"><input type="checkbox" data-rapid-tag-none-include ${ui.documentTableTagNoneSelected ? 'checked' : ''} /> <span>none selected</span></label></div>${tagIncludeTree}</div><div><div class="label" style="margin-bottom:6px">Filter exclusion</div><div class="elementsFilterChecklist"><label class="checkItem" style="margin:0"><input type="checkbox" data-rapid-tag-none-exclude ${ui.documentTableTagExcludeNoneSelected !== false ? 'checked' : ''} /> <span>none selected</span></label></div>${tagExcludeTree}</div></div></div><div><div class="label">Exhibit status</div>${rapidSimpleFilterMarkup(items.exhibitItems, ui.documentTableExhibitIds || [], ui.documentTableExhibitExcludeIds || [], !!ui.documentTableExhibitNoneSelected, ui.documentTableExhibitExcludeNoneSelected !== false, 'exhibit')}</div><div><div class="label">Timeline</div>${rapidSimpleFilterMarkup(items.timelineItems, ui.documentTableTimelineIds || [], ui.documentTableTimelineExcludeIds || [], !!ui.documentTableTimelineNoneSelected, ui.documentTableTimelineExcludeNoneSelected !== false, 'timeline')}</div><div><div class="label">File</div>${rapidSimpleFilterMarkup(items.fileItems, ui.documentTableFileIds || [], ui.documentTableFileExcludeIds || [], !!ui.documentTableFileNoneSelected, ui.documentTableFileExcludeNoneSelected !== false, 'file')}</div><div><div class="label">Document type</div><div class="elementsFilterChecklist">${typeOptions.length ? typeOptions.map(item => `<label class="checkItem" style="margin:0"><input type="checkbox" data-rapid-type-filter value="${escapeHtml(item.id)}" ${selectedTypeSet.has(item.id) ? 'checked' : ''} /> <span>${escapeHtml(item.name)}</span></label>`).join('') : '<div class="hint">No file types.</div>'}</div></div><div><div class="label">Status</div>${rapidSimpleFilterMarkup(getDocumentStatusOptions(), ui.documentTableStatusIds || [], ui.documentTableStatusExcludeIds || [], !!ui.documentTableStatusNoneSelected, ui.documentTableStatusExcludeNoneSelected !== false, 'status')}</div></div></div>`;
+  }
+  function setRapidFilterPanelOpen(setId, open){
+    discoveryState.rapidFilterPanelOpenBySet = discoveryState.rapidFilterPanelOpenBySet || {};
+    discoveryState.rapidFilterPanelOpenBySet[setId] = !!open;
+    saveDiscoveryLocal();
+    renderDiscoveryClientList();
+  }
+  function bindRapidDiscoveryDocumentFilters(host){
+    if(!host) return;
+    const rerender = ()=>{ saveDiscoveryLocal(); renderDiscoveryClientList(); };
+    host.querySelectorAll('[data-rapid-filter-toggle]').forEach(btn => btn.addEventListener('click', ()=>{
+      const setId = btn.getAttribute('data-rapid-filter-toggle') || '';
+      setRapidFilterPanelOpen(setId, !((discoveryState.rapidFilterPanelOpenBySet || {})[setId]));
+    }));
+    host.querySelectorAll('[data-rapid-tag-none-include]').forEach(input => input.addEventListener('change', ev => { ui.documentTableTagNoneSelected = !!ev.target.checked; rerender(); }));
+    host.querySelectorAll('[data-rapid-tag-none-exclude]').forEach(input => input.addEventListener('change', ev => { ui.documentTableTagExcludeNoneSelected = !!ev.target.checked; rerender(); }));
+    host.querySelectorAll('[data-rapid-tag-include],[data-rapid-tag-exclude]').forEach(input => input.addEventListener('change', ()=>{
+      ui.documentTableTagIds = Array.from(host.querySelectorAll('[data-rapid-tag-include]:checked')).map(x => ({ tagId: x.getAttribute('data-tag-id') || '', subtagId: x.getAttribute('data-subtag-id') || '' })).filter(link => link.tagId);
+      ui.documentTableTagExcludeIds = Array.from(host.querySelectorAll('[data-rapid-tag-exclude]:checked')).map(x => ({ tagId: x.getAttribute('data-tag-id') || '', subtagId: x.getAttribute('data-subtag-id') || '' })).filter(link => link.tagId);
+      rerender();
+    }));
+    host.querySelectorAll('[data-element-tag-collapse]').forEach(btn => btn.addEventListener('click', (e)=>{
+      e.preventDefault(); e.stopPropagation(); const id = btn.getAttribute('data-element-tag-collapse') || ''; ui.documentTableCollapsedTagNodes = ui.documentTableCollapsedTagNodes || {}; ui.documentTableCollapsedTagNodes[id] = !ui.documentTableCollapsedTagNodes[id]; rerender();
+    }));
+    const keyMap = { exhibit:['documentTableExhibitIds','documentTableExhibitExcludeIds','documentTableExhibitNoneSelected','documentTableExhibitExcludeNoneSelected'], timeline:['documentTableTimelineIds','documentTableTimelineExcludeIds','documentTableTimelineNoneSelected','documentTableTimelineExcludeNoneSelected'], file:['documentTableFileIds','documentTableFileExcludeIds','documentTableFileNoneSelected','documentTableFileExcludeNoneSelected'], status:['documentTableStatusIds','documentTableStatusExcludeIds','documentTableStatusNoneSelected','documentTableStatusExcludeNoneSelected'] };
+    Object.keys(keyMap).forEach(kind => {
+      const keys = keyMap[kind];
+      host.querySelectorAll(`[data-rapid-filter-include="${kind}"]`).forEach(input => input.addEventListener('change', ()=>{ ui[keys[0]] = Array.from(host.querySelectorAll(`[data-rapid-filter-include="${kind}"]:checked`)).map(x => x.value).filter(Boolean); rerender(); }));
+      host.querySelectorAll(`[data-rapid-filter-exclude="${kind}"]`).forEach(input => input.addEventListener('change', ()=>{ ui[keys[1]] = Array.from(host.querySelectorAll(`[data-rapid-filter-exclude="${kind}"]:not(:checked)`)).map(x => x.value).filter(Boolean); rerender(); }));
+      host.querySelectorAll(`[data-rapid-filter-none-include="${kind}"]`).forEach(input => input.addEventListener('change', ev => { ui[keys[2]] = !!ev.target.checked; rerender(); }));
+      host.querySelectorAll(`[data-rapid-filter-none-exclude="${kind}"]`).forEach(input => input.addEventListener('change', ev => { ui[keys[3]] = !!ev.target.checked; rerender(); }));
+    });
+    host.querySelectorAll('[data-rapid-type-filter]').forEach(input => input.addEventListener('change', ()=>{ ui.documentTableTypeIds = Array.from(host.querySelectorAll('[data-rapid-type-filter]:checked')).map(x => x.value).filter(Boolean); rerender(); }));
+  }
   function renderRapidDiscoveryResponses(set){
     if(!set || normalizeDiscoveryType(set.discovery_type) !== 'production') return '';
     const allDocs = getRapidDiscoveryMatterDocuments();
@@ -11943,6 +12033,8 @@ const endpoint = `${SUPABASE_URL}/functions/v1/finalize-exhibit-packet`;
     if(!allDocs.length) return `<div class="rapidDiscoveryBox"><div class="rapidDiscoveryTop"><div><button type="button" class="rapidDiscoveryLink" data-rapid-open="${escapeHtml(set.id)}">Rapid Discovery Responses</button><div class="hint">No matter documents have been added yet. Add documents on the Documents page first.</div></div></div></div>`;
 
     discoveryState.rapidOpenBySet = discoveryState.rapidOpenBySet || {};
+    const rapidStandalone = isRapidDiscoveryStandaloneWindow(set.id);
+    if(rapidStandalone) discoveryState.rapidOpenBySet[set.id] = true;
     if(!discoveryState.rapidOpenBySet[set.id]){
       return `<div class="rapidDiscoveryBox"><div class="rapidDiscoveryTop"><div><button type="button" class="rapidDiscoveryLink" data-rapid-open="${escapeHtml(set.id)}">Rapid Discovery Responses</button><div class="hint">Open the rapid worksheet to assign already-added matter documents to RFP requests.</div></div></div></div>`;
     }
@@ -11952,11 +12044,11 @@ const endpoint = `${SUPABASE_URL}/functions/v1/finalize-exhibit-packet`;
     const sort = (discoveryState.rapidSortBySet || {})[set.id] || 'newest';
     const filterText = rapidDiscoveryFilter(set.id);
     const filterNeedle = filterText.trim().toLowerCase();
-    const availableDocs = allDocs.filter(doc => !assigned.has(String(doc.id)) && !removed.has(String(doc.id)));
+    const availableDocs = allDocs.filter(doc => !assigned.has(String(doc.id)) && !removed.has(String(doc.id)) && rapidDiscoveryFilteredByDocumentWorksheet(doc));
     let docs = availableDocs.slice();
     if(filterNeedle){
       docs = docs.filter(doc => {
-        const hay = [doc.name, getAnyDocumentOriginalFileName(doc), doc.description, rapidDiscoveryUploadDate(doc), formatDateForDisplay(rapidDiscoveryUploadDate(doc))].map(v => String(v || '').toLowerCase()).join(' ');
+        const hay = [doc.name, getAnyDocumentOriginalFileName(doc), doc.description, rapidDiscoveryUploadDate(doc), formatDateForDisplay(rapidDiscoveryUploadDate(doc)), ...getDocumentTagLinks(doc).map(link => { const parts = []; const tag = state.tags.find(t => t.id === link.tagId); if(tag) parts.push(tag.name || ''); if(link.subtagId){ const sub = getSubtagById(link.subtagId); if(sub) parts.push(getSubtagPath(sub.id)); } return parts.join(' '); })].map(v => String(v || '').toLowerCase()).join(' ');
         return hay.includes(filterNeedle);
       });
     }
@@ -11966,10 +12058,11 @@ const endpoint = `${SUPABASE_URL}/functions/v1/finalize-exhibit-packet`;
       return sort === 'oldest' ? av.localeCompare(bv) : bv.localeCompare(av);
     });
     const removedCount = rapidDiscoveryRemovedIds(set.id).length;
-    const controls = `<div class="rapidDiscoveryControls"><div class="rapidDiscoveryFilterWrap"><label class="hint" for="rapidDiscoveryFilter_${escapeHtml(set.id)}">Filter documents</label><input id="rapidDiscoveryFilter_${escapeHtml(set.id)}" class="rapidDiscoveryFilterInput" type="text" data-rapid-filter="${escapeHtml(set.id)}" value="${escapeHtml(filterText)}" placeholder="Filter by document name or upload date..."></div><button type="button" class="mini" data-rapid-select-all="${escapeHtml(set.id)}">Select all rows</button><button type="button" class="mini" data-rapid-deselect-all="${escapeHtml(set.id)}">Deselect all rows</button><button type="button" class="btnDanger mini" data-rapid-remove-rows="${escapeHtml(set.id)}">Remove selected rows</button>${removedCount ? `<button type="button" class="mini" data-rapid-reset="${escapeHtml(set.id)}">Show removed rows (${removedCount})</button>` : ''}</div>`;
+    const filtersOpen = !!((discoveryState.rapidFilterPanelOpenBySet || {})[set.id]);
+    const controls = `<div class="rapidDiscoveryControls"><div class="rapidDiscoveryFilterWrap"><label class="hint" for="rapidDiscoveryFilter_${escapeHtml(set.id)}">Filter documents</label><input id="rapidDiscoveryFilter_${escapeHtml(set.id)}" class="rapidDiscoveryFilterInput" type="text" data-rapid-filter="${escapeHtml(set.id)}" value="${escapeHtml(filterText)}" placeholder="Filter by document name, tag, or upload date..."></div><button type="button" class="mini" data-rapid-filter-toggle="${escapeHtml(set.id)}">${filtersOpen ? 'Hide filters' : 'Filters'}</button><button type="button" class="mini" data-rapid-select-all="${escapeHtml(set.id)}">Select all rows</button><button type="button" class="mini" data-rapid-deselect-all="${escapeHtml(set.id)}">Deselect all rows</button><button type="button" class="btnDanger mini" data-rapid-remove-rows="${escapeHtml(set.id)}">Remove selected rows</button>${removedCount ? `<button type="button" class="mini" data-rapid-reset="${escapeHtml(set.id)}">Show removed rows (${removedCount})</button>` : ''}</div>${renderRapidDiscoveryFilterPanel(set.id)}`;
     const head = `<tr><th class="rapidDiscoveryRemoveHead">Remove</th><th class="rapidDiscoveryDocHead">Document</th><th><button type="button" class="mini" data-rapid-sort="${escapeHtml(set.id)}" data-sort-next="${sort === 'oldest' ? 'newest' : 'oldest'}">Upload date ${sort === 'oldest' ? '▲' : '▼'}</button></th>${rfpReqs.map(req => `<th>Req. ${escapeHtml(req.request_number || '')}</th>`).join('')}</tr>`;
     const rows = docs.length ? docs.map(doc => `<tr><td class="rapidDiscoveryRemoveCell"><input type="checkbox" data-rapid-row-check="${escapeHtml(set.id)}" value="${escapeHtml(doc.id)}" aria-label="Select ${escapeHtml(doc.name || getAnyDocumentOriginalFileName(doc) || 'Document')} for removal"></td><td class="rapidDiscoveryDocCell"><div class="rapidDiscoveryDocName" title="${escapeHtml(doc.name || getAnyDocumentOriginalFileName(doc) || 'Document')}">${escapeHtml(doc.name || getAnyDocumentOriginalFileName(doc) || 'Document')}</div></td><td>${escapeHtml(formatDateForDisplay(rapidDiscoveryUploadDate(doc)) || rapidDiscoveryUploadDate(doc) || 'No date')}</td>${rfpReqs.map(req => `<td><button type="button" class="rapidDiscoveryCellBtn" data-rapid-assign-doc="${escapeHtml(doc.id)}" data-rapid-assign-req="${escapeHtml(req.id)}">Add to Req. ${escapeHtml(req.request_number || '')}</button></td>`).join('')}</tr>`).join('') : `<tr><td colspan="999"><div class="empty">${availableDocs.length ? 'No documents match the current filter.' : 'All matter documents have either been assigned to a request or removed from this worksheet.'}</div></td></tr>`;
-    return `<div class="rapidDiscoveryBox"><div class="rapidDiscoveryTop"><div><button type="button" class="rapidDiscoveryLink" data-rapid-open="${escapeHtml(set.id)}">Rapid Discovery Responses</button><div class="hint">All unassigned matter documents are listed below. Remove rows you do not want to consider, or click a document/request intersection to add the document as responsive to that request.</div></div><button type="button" class="btnGhost" data-rapid-close="${escapeHtml(set.id)}">Close rapid worksheet</button></div>${controls}<div class="hint">Showing ${docs.length} of ${availableDocs.length} available documents. Documents already added to RFP requests are hidden automatically.</div><div class="rapidDiscoveryTableWrap"><table class="rapidDiscoveryTable"><thead>${head}</thead><tbody>${rows}</tbody></table></div></div>`;
+    return `<div class="rapidDiscoveryBox"><div class="rapidDiscoveryTop"><div>${rapidStandalone ? '<span class="rapidDiscoveryWindowNotice">Rapid worksheet window</span>' : `<button type="button" class="rapidDiscoveryLink" data-rapid-open="${escapeHtml(set.id)}">Rapid Discovery Responses</button>`}<div class="hint">All unassigned matter documents are listed below. Remove rows you do not want to consider, or click a document/request intersection to add the document as responsive to that request.</div></div><button type="button" class="btnGhost" data-rapid-close="${escapeHtml(set.id)}">${rapidStandalone ? 'Close window' : 'Close rapid worksheet'}</button></div>${controls}<div class="hint">Showing ${docs.length} of ${availableDocs.length} available documents. Documents already added to RFP requests are hidden automatically.</div><div class="rapidDiscoveryTableWrap"><table class="rapidDiscoveryTable"><thead>${head}</thead><tbody>${rows}</tbody></table></div></div>`;
   }
 
 
@@ -12478,6 +12571,7 @@ const endpoint = `${SUPABASE_URL}/functions/v1/finalize-exhibit-packet`;
     host.querySelectorAll('[data-rapid-deselect-all]').forEach(btn => btn.addEventListener('click', () => selectRapidDiscoveryRows(btn.getAttribute('data-rapid-deselect-all'), false)));
     host.querySelectorAll('[data-rapid-remove-rows]').forEach(btn => btn.addEventListener('click', () => removeRapidDiscoveryRows(btn.getAttribute('data-rapid-remove-rows'))));
     host.querySelectorAll('[data-rapid-sort]').forEach(btn => btn.addEventListener('click', () => setRapidDiscoverySort(btn.getAttribute('data-rapid-sort'), btn.getAttribute('data-sort-next'))));
+    bindRapidDiscoveryDocumentFilters(host);
     host.querySelectorAll('[data-rapid-assign-doc]').forEach(btn => btn.addEventListener('click', () => attachExistingMatterDocumentToDiscoveryRequest(btn.getAttribute('data-rapid-assign-req'), btn.getAttribute('data-rapid-assign-doc'))));
     host.querySelectorAll('[data-discovery-need-help]').forEach(btn => btn.addEventListener('click', () => setDiscoveryNeedHelp(btn.getAttribute('data-discovery-need-help'), !getDiscoveryNeedHelp(btn.getAttribute('data-discovery-need-help')))));
   }
