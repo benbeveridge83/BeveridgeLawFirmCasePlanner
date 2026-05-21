@@ -12697,7 +12697,7 @@ const endpoint = `${SUPABASE_URL}/functions/v1/finalize-exhibit-packet`;
     if(!win){ alert('Please allow popups to open response options.'); return; }
     const safeId = String(set.id).replace(/'/g, "\\'");
     win.document.open();
-    win.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>Responses</title><style>body{font-family:Arial,sans-serif;margin:20px;color:#0f172a}button{display:block;width:100%;margin:8px 0;border:1px solid #e2e8f0;border-radius:12px;background:#fff;padding:10px 12px;font-weight:700;text-align:left;cursor:pointer}button:hover{background:#f8fbff}.primary{background:#2563eb;color:#fff}.hint{color:#64748b;font-size:13px}</style></head><body><h2>Responses</h2><p class="hint">${escapeHtml(set.title || '')}</p><button onclick="window.opener.downloadDiscoveryWordForSet('${safeId}', true)">Download responses with Notes to attorney</button><button onclick="window.opener.downloadDiscoveryWordForSet('${safeId}', false)">Download responses without attorney notes</button><button onclick="window.opener.openDiscoveryUploadedDocsWindow('${safeId}')">Uploaded documents</button><button onclick="window.opener.openDiscoveryLogWindow('${safeId}')">Discovery log</button></body></html>`);
+    win.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>Responses</title><style>body{font-family:Arial,sans-serif;margin:20px;color:#0f172a}button{display:block;width:100%;margin:8px 0;border:1px solid #e2e8f0;border-radius:12px;background:#fff;padding:10px 12px;font-weight:700;text-align:left;cursor:pointer}button:hover{background:#f8fbff}.primary{background:#2563eb;color:#fff}.hint{color:#64748b;font-size:13px}</style></head><body><h2>Responses</h2><p class="hint">${escapeHtml(set.title || '')}</p><button onclick="window.opener.downloadDiscoveryWordForSet('${safeId}', true)">Download responses with Notes to attorney</button><button onclick="window.opener.downloadDiscoveryWordForSet('${safeId}', false)">Download responses without attorney notes</button><button onclick="window.opener.openDiscoveryUploadedDocsWindow('${safeId}')">Uploaded documents</button><button onclick="window.opener.convertDiscoveryDocumentsToPdfsZip('${safeId}')">Convert to PDFs</button><button onclick="window.opener.openDiscoveryLogWindow('${safeId}')">Discovery log</button></body></html>`);
     win.document.close();
   }
 
@@ -12973,12 +12973,141 @@ const endpoint = `${SUPABASE_URL}/functions/v1/finalize-exhibit-packet`;
     document.body.appendChild(a); a.click();
     setTimeout(()=>{ URL.revokeObjectURL(a.href); a.remove(); }, 1000);
   }
+  function discoveryPdfFileNameFromRow(row){
+    const raw = row?.defaultName || row?.file?.file_name || 'document';
+    const safe = sanitizeFileName(raw || 'document').replace(/\.[A-Za-z0-9]{1,8}$/,'') || 'document';
+    return `${safe}.pdf`;
+  }
+  function discoveryFileExtensionLower(nameOrUrl){
+    const ext = discoveryExtensionFromPathOrUrl(nameOrUrl || '');
+    return String(ext || '').toLowerCase();
+  }
+  async function discoveryCreatePlaceholderPdf(fileName, note='This file could not be converted directly to PDF in the browser.'){
+    if(!window.PDFLib){ throw new Error('PDF library is not available.'); }
+    const { PDFDocument, StandardFonts, rgb } = window.PDFLib;
+    const pdf = await PDFDocument.create();
+    const font = await pdf.embedFont(StandardFonts.Helvetica);
+    const bold = await pdf.embedFont(StandardFonts.HelveticaBold);
+    const page = pdf.addPage([612, 792]);
+    const cleanName = String(fileName || 'Document');
+    page.drawText(cleanName, { x:54, y:700, size:18, font:bold, color:rgb(0.05,0.09,0.16) });
+    page.drawText(note, { x:54, y:664, size:11, font, color:rgb(0.25,0.32,0.42), maxWidth:500, lineHeight:15 });
+    page.drawText('Original file name:', { x:54, y:620, size:11, font:bold, color:rgb(0.05,0.09,0.16) });
+    page.drawText(cleanName, { x:54, y:602, size:11, font, color:rgb(0.05,0.09,0.16), maxWidth:500, lineHeight:14 });
+    return new Blob([await pdf.save()], { type:'application/pdf' });
+  }
+  async function discoveryCreateTextPdf(fileName, textContent){
+    if(!window.PDFLib){ throw new Error('PDF library is not available.'); }
+    const { PDFDocument, StandardFonts, rgb } = window.PDFLib;
+    const pdf = await PDFDocument.create();
+    const font = await pdf.embedFont(StandardFonts.Helvetica);
+    const bold = await pdf.embedFont(StandardFonts.HelveticaBold);
+    const title = String(fileName || 'Document');
+    const lines = String(textContent || '').replace(/\r/g,'').split('\n').flatMap(line => {
+      const chunks = [];
+      let remaining = line || ' ';
+      while(remaining.length > 92){ chunks.push(remaining.slice(0,92)); remaining = remaining.slice(92); }
+      chunks.push(remaining);
+      return chunks;
+    });
+    let page = pdf.addPage([612, 792]);
+    let y = 736;
+    page.drawText(title, { x:54, y, size:15, font:bold, color:rgb(0.05,0.09,0.16) });
+    y -= 28;
+    for(const line of lines){
+      if(y < 54){ page = pdf.addPage([612, 792]); y = 736; }
+      page.drawText(line, { x:54, y, size:10, font, color:rgb(0.05,0.09,0.16), maxWidth:504 });
+      y -= 13;
+    }
+    return new Blob([await pdf.save()], { type:'application/pdf' });
+  }
+  async function discoveryConvertImageBlobToPdf(fileName, blob){
+    if(!window.PDFLib){ throw new Error('PDF library is not available.'); }
+    const objectUrl = URL.createObjectURL(blob);
+    try{
+      const img = await new Promise((resolve, reject) => {
+        const image = new Image();
+        image.onload = () => resolve(image);
+        image.onerror = () => reject(new Error('Browser could not read this image format.'));
+        image.src = objectUrl;
+      });
+      const canvas = document.createElement('canvas');
+      canvas.width = img.naturalWidth || img.width || 800;
+      canvas.height = img.naturalHeight || img.height || 1000;
+      const ctx = canvas.getContext('2d');
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0,0,canvas.width,canvas.height);
+      ctx.drawImage(img,0,0);
+      const pngBytes = await new Promise(resolve => canvas.toBlob(async b => resolve(await b.arrayBuffer()), 'image/png'));
+      const { PDFDocument } = window.PDFLib;
+      const pdf = await PDFDocument.create();
+      const embedded = await pdf.embedPng(pngBytes);
+      const maxW = 540, maxH = 720;
+      const scale = Math.min(maxW / embedded.width, maxH / embedded.height, 1);
+      const w = embedded.width * scale;
+      const h = embedded.height * scale;
+      const page = pdf.addPage([612, 792]);
+      page.drawImage(embedded, { x:(612-w)/2, y:(792-h)/2, width:w, height:h });
+      return new Blob([await pdf.save()], { type:'application/pdf' });
+    } finally {
+      URL.revokeObjectURL(objectUrl);
+    }
+  }
+  async function discoveryConvertBlobToPdfBlob(row, blob){
+    const name = ensureDiscoveryDownloadExtension(row?.file?.file_name || row?.defaultName || 'Document', row?.file || {}, row?.url || '');
+    const ext = discoveryFileExtensionLower(name || row?.url || '');
+    const mime = String(blob?.type || '').toLowerCase();
+    if(ext === '.pdf' || mime.includes('pdf')) return blob;
+    if(mime.startsWith('image/') || ['.png','.jpg','.jpeg','.webp','.gif','.bmp','.heic','.heif'].includes(ext)){
+      try { return await discoveryConvertImageBlobToPdf(name, blob); }
+      catch(e){ return await discoveryCreatePlaceholderPdf(name, 'This image format could not be converted directly by the browser, so this placeholder PDF identifies the original file.'); }
+    }
+    if(mime.startsWith('text/') || ['.txt','.csv','.json'].includes(ext)){
+      try { return await discoveryCreateTextPdf(name, await blob.text()); }
+      catch(e){ return await discoveryCreatePlaceholderPdf(name); }
+    }
+    return await discoveryCreatePlaceholderPdf(name, 'This audio, video, or other file type could not be converted directly to PDF in the browser, so this placeholder PDF identifies the original file.');
+  }
+  async function convertDiscoveryDocumentsToPdfsZip(setId=null){
+    const set = setId ? getDiscoverySetById(setId) : getSelectedDiscoverySet();
+    if(!set){ alert('Select a discovery set first.'); return; }
+    if(!window.JSZip){ alert('JSZip is not available on this page.'); return; }
+    if(!window.PDFLib){ alert('PDF conversion library is not available on this page.'); return; }
+    const rows = discoveryUploadedDocumentRows(set);
+    if(!rows.length){ alert('No uploaded discovery documents found for this set.'); return; }
+    const zip = new JSZip();
+    let converted = 0;
+    for(const row of rows){
+      const pdfName = discoveryPdfFileNameFromRow(row);
+      try{
+        const res = await fetch(row.url);
+        if(!res.ok) throw new Error('Could not download ' + row.url);
+        const sourceBlob = await res.blob();
+        const pdfBlob = await discoveryConvertBlobToPdfBlob(row, sourceBlob);
+        zip.file(pdfName, pdfBlob);
+        converted++;
+      }catch(e){
+        try{
+          zip.file(pdfName, await discoveryCreatePlaceholderPdf(row?.file?.file_name || row?.defaultName || pdfName, String(e?.message || e)));
+        }catch(inner){
+          zip.file(`ERROR_${sanitizeFileName(pdfName)}.txt`, String(e?.message || e));
+        }
+      }
+    }
+    const blob = await zip.generateAsync({ type:'blob' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `${sanitizeFileName(set.title || 'discovery_documents')}_pdfs.zip`;
+    document.body.appendChild(a); a.click();
+    setTimeout(()=>{ URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+  }
   window.openDiscoveryDocumentDownloadWindow = openDiscoveryDocumentDownloadWindow;
   window.openDiscoveryUploadedDocsWindow = openDiscoveryUploadedDocsWindow;
   window.openDiscoveryLogWindow = openDiscoveryLogWindow;
   window.downloadDiscoveryLogCsv = downloadDiscoveryLogCsv;
   window.downloadDiscoveryLogWord = downloadDiscoveryLogWord;
   window.discoveryDownloadNamedFilesZip = discoveryDownloadNamedFilesZip;
+  window.convertDiscoveryDocumentsToPdfsZip = convertDiscoveryDocumentsToPdfsZip;
   async function downloadDiscoveryResponsesBundle(setId=null){
     const set = setId ? getDiscoverySetById(setId) : getSelectedDiscoverySet();
     if(!set){ alert('Select a discovery set first.'); return; }
