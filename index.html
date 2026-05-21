@@ -1691,6 +1691,21 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_KEY, {
     .discoveryReqText{white-space:pre-wrap;line-height:1.45;}
     .discoveryReqNumber{font-weight:900;color:var(--brand2);}
     .discoveryClientAnswers{display:grid;gap:10px;}
+    .rapidDiscoveryBox{border:1px solid rgba(37,99,235,.24);border-radius:16px;background:#f8fbff;padding:12px;display:grid;gap:10px;}
+    .rapidDiscoveryTop{display:flex;justify-content:space-between;gap:10px;align-items:flex-start;flex-wrap:wrap;}
+    .rapidDiscoveryLink{display:inline-flex;align-items:center;gap:6px;color:var(--brand2);font-weight:900;text-decoration:underline;text-underline-offset:3px;background:transparent;border:none;box-shadow:none;padding:0;border-radius:0;}
+    .rapidDiscoveryPickerList{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:8px;max-height:260px;overflow:auto;border:1px solid var(--border);border-radius:14px;background:#fff;padding:10px;}
+    .rapidDiscoveryDocPick{display:flex;align-items:center;gap:8px;border:1px solid var(--border);border-radius:12px;background:#fff;padding:8px 10px;font-size:13px;font-weight:700;}
+    .rapidDiscoveryTableWrap{overflow:auto;border:1px solid var(--border);border-radius:14px;background:#fff;}
+    .rapidDiscoveryTable{width:max-content;min-width:100%;border-collapse:collapse;background:#fff;}
+    .rapidDiscoveryTable th,.rapidDiscoveryTable td{border-bottom:1px solid var(--border);border-right:1px solid var(--border);padding:6px 8px;vertical-align:middle;text-align:left;white-space:nowrap;}
+    .rapidDiscoveryTable th{background:#f8fbff;font-size:12px;font-weight:900;color:var(--muted);position:sticky;top:0;z-index:2;}
+    .rapidDiscoveryTable th:first-child,.rapidDiscoveryTable td:first-child{position:sticky;left:0;background:#fff;z-index:1;min-width:260px;}
+    .rapidDiscoveryTable thead th:first-child{background:#f8fbff;z-index:3;}
+    .rapidDiscoveryDocName{max-width:320px;overflow:hidden;text-overflow:ellipsis;font-weight:800;}
+    .rapidDiscoveryCellBtn{width:100%;min-width:86px;border-radius:10px;padding:6px 8px;font-size:12px;background:#fff;box-shadow:none;}
+    .rapidDiscoveryCellBtn:hover{background:rgba(37,99,235,.08);border-color:rgba(37,99,235,.35);}
+
     .discoveryFileList{display:grid;gap:6px;}
     .discoveryFilePill{display:flex;justify-content:space-between;gap:8px;align-items:center;border:1px solid var(--border);border-radius:999px;background:var(--surface2);padding:6px 10px;font-size:12px;font-weight:800;}
     .discoveryStatusPill{display:inline-flex;align-items:center;gap:6px;padding:5px 10px;border-radius:999px;border:1px solid rgba(37,99,235,.24);background:rgba(37,99,235,.08);color:var(--brand2);font-size:12px;font-weight:900;}
@@ -11682,7 +11697,7 @@ const endpoint = `${SUPABASE_URL}/functions/v1/finalize-exhibit-packet`;
     'The documents exist but I’m not producing them - I’ll specify in the comment why',
     'I am not sure / need attorney help'
   ];
-  let discoveryState = { sets: [], requests: [], responses: [], files: [], selectedSetId: '', mode: 'attorney', loaded: false, supabaseOk: true };
+  let discoveryState = { sets: [], requests: [], responses: [], files: [], selectedSetId: '', mode: 'attorney', loaded: false, supabaseOk: true, rapidSelectedDocIdsBySet: {}, rapidSortBySet: {} };
   let discoveryUploadModalRequestId = '';
   function discoveryUid(){ return (crypto && crypto.randomUUID) ? crypto.randomUUID() : 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => { const r = Math.random()*16|0; const v = c === 'x' ? r : (r&0x3|0x8); return v.toString(16); }); }
 
@@ -11802,6 +11817,102 @@ const endpoint = `${SUPABASE_URL}/functions/v1/finalize-exhibit-packet`;
     return resp;
   }
   function discoveryFilesForRequest(requestId){ return (discoveryState.files || []).filter(f => f.request_id === requestId); }
+
+  function getRapidDiscoveryMatterDocuments(){
+    const docs = Array.isArray(state?.documents) && state.documents.length ? state.documents : (Array.isArray(window.loadedDocuments) ? window.loadedDocuments : []);
+    return (docs || []).filter(d => d && d.id).slice();
+  }
+  function rapidDiscoveryAssignedDocumentIdsForSet(setId){
+    const reqIds = new Set(discoveryRequestsForSet(setId, true).map(r => String(r.id)));
+    return new Set((discoveryState.files || []).filter(f => reqIds.has(String(f.request_id)) && f.document_id).map(f => String(f.document_id)));
+  }
+  function rapidDiscoverySelectedIds(setId){
+    discoveryState.rapidSelectedDocIdsBySet = discoveryState.rapidSelectedDocIdsBySet || {};
+    return Array.isArray(discoveryState.rapidSelectedDocIdsBySet[setId]) ? discoveryState.rapidSelectedDocIdsBySet[setId] : [];
+  }
+  function rapidDiscoveryUploadDate(doc){ return String(doc?.created_at || doc?.uploaded_at || doc?.updated_at || doc?.doc_date || '').slice(0,10); }
+  function setRapidDiscoverySort(setId, sort){
+    discoveryState.rapidSortBySet = discoveryState.rapidSortBySet || {};
+    discoveryState.rapidSortBySet[setId] = sort === 'oldest' ? 'oldest' : 'newest';
+    saveDiscoveryLocal();
+    renderDiscoveryClientList();
+  }
+  function startRapidDiscoveryPick(setId){
+    const picked = Array.from(document.querySelectorAll('[data-rapid-doc-pick]:checked')).map(i => i.value).filter(Boolean);
+    if(!picked.length){ alert('Select at least one matter document first.'); return; }
+    discoveryState.rapidSelectedDocIdsBySet = discoveryState.rapidSelectedDocIdsBySet || {};
+    discoveryState.rapidSelectedDocIdsBySet[setId] = picked;
+    saveDiscoveryLocal();
+    renderDiscoveryClientList();
+  }
+  function resetRapidDiscoveryPick(setId){
+    discoveryState.rapidSelectedDocIdsBySet = discoveryState.rapidSelectedDocIdsBySet || {};
+    discoveryState.rapidSelectedDocIdsBySet[setId] = [];
+    saveDiscoveryLocal();
+    renderDiscoveryClientList();
+  }
+  async function attachExistingMatterDocumentToDiscoveryRequest(requestId, docId){
+    const doc = getRapidDiscoveryMatterDocuments().find(d => String(d.id) === String(docId));
+    const req = (discoveryState.requests || []).find(r => String(r.id) === String(requestId));
+    if(!doc || !req){ alert('Could not find that document or request.'); return; }
+    const set = getDiscoverySetById(req.discovery_set_id);
+    const duplicate = (discoveryState.files || []).some(f => String(f.request_id) === String(requestId) && String(f.document_id || '') === String(doc.id));
+    if(duplicate){ renderDiscoveryClientList(); return; }
+    const local = {
+      id: discoveryUid(),
+      case_id: getCaseId(),
+      request_id: requestId,
+      response_id: null,
+      document_id: doc.id,
+      file_name: doc.name || getAnyDocumentOriginalFileName(doc) || 'Document',
+      file_type: doc.mime_type || doc.mimeType || '',
+      file_size: Number(doc.file_size || doc.fileSize || 0) || 0,
+      file_path: getAnyDocumentFilePath(doc),
+      created_at: new Date().toISOString()
+    };
+    try{
+      if(set && req) await applyDiscoveryTagsToDocument(doc.id, set, req);
+      if(window.supabase && discoveryState.supabaseOk){
+        const { data, error } = await supabase.from('discovery_files').insert(local).select().single();
+        if(error) throw error;
+        discoveryState.files.push(data || local);
+      } else {
+        discoveryState.files.push(local);
+      }
+      saveDiscoveryLocal();
+      renderDiscovery();
+    }catch(error){
+      console.warn('Could not attach existing matter document to discovery request.', error);
+      discoveryState.files.push(local);
+      saveDiscoveryLocal();
+      renderDiscovery();
+    }
+  }
+  function renderRapidDiscoveryResponses(set){
+    if(!set || normalizeDiscoveryType(set.discovery_type) !== 'production') return '';
+    const allDocs = getRapidDiscoveryMatterDocuments();
+    const assigned = rapidDiscoveryAssignedDocumentIdsForSet(set.id);
+    const availableDocs = allDocs.filter(doc => !assigned.has(String(doc.id)));
+    const selectedIds = rapidDiscoverySelectedIds(set.id).filter(id => availableDocs.some(doc => String(doc.id) === String(id)));
+    const rfpReqs = discoveryRequestsForSet(set.id, true).filter(req => normalizeDiscoveryType(req.request_type) === 'production');
+    if(!allDocs.length) return `<div class="rapidDiscoveryBox"><div class="rapidDiscoveryTop"><div><button type="button" class="rapidDiscoveryLink">Rapid Discovery Responses</button><div class="hint">No matter documents have been added yet. Add documents on the Documents page first.</div></div></div></div>`;
+    if(!rfpReqs.length) return '';
+    if(!selectedIds.length){
+      const pickRows = availableDocs.length ? availableDocs.map(doc => `<label class="rapidDiscoveryDocPick"><input type="checkbox" data-rapid-doc-pick="1" value="${escapeHtml(doc.id)}"> <span>${escapeHtml(doc.name || getAnyDocumentOriginalFileName(doc) || 'Document')}<br><span class="hint">Uploaded: ${escapeHtml(formatDateForDisplay(rapidDiscoveryUploadDate(doc)) || rapidDiscoveryUploadDate(doc) || 'No date')}</span></span></label>`).join('') : '<div class="empty">All selected matter documents have already been assigned to requests in this RFP set.</div>';
+      return `<div class="rapidDiscoveryBox"><div class="rapidDiscoveryTop"><div><button type="button" class="rapidDiscoveryLink">Rapid Discovery Responses</button><div class="hint">Select already-added matter documents, then match each document to the RFP request it responds to.</div></div></div><div class="rapidDiscoveryPickerList">${pickRows}</div>${availableDocs.length ? `<div class="row"><button type="button" class="btnPrimary" data-rapid-start="${escapeHtml(set.id)}">Use selected documents</button></div>` : ''}</div>`;
+    }
+    const sort = (discoveryState.rapidSortBySet || {})[set.id] || 'newest';
+    let docs = availableDocs.filter(doc => selectedIds.includes(String(doc.id)));
+    docs.sort((a,b) => {
+      const av = rapidDiscoveryUploadDate(a) || '';
+      const bv = rapidDiscoveryUploadDate(b) || '';
+      return sort === 'oldest' ? av.localeCompare(bv) : bv.localeCompare(av);
+    });
+    const head = `<tr><th>Document</th><th><button type="button" class="mini" data-rapid-sort="${escapeHtml(set.id)}" data-sort-next="${sort === 'oldest' ? 'newest' : 'oldest'}">Upload date ${sort === 'oldest' ? '▲' : '▼'}</button></th>${rfpReqs.map(req => `<th>Req. ${escapeHtml(req.request_number || '')}</th>`).join('')}</tr>`;
+    const rows = docs.length ? docs.map(doc => `<tr><td><div class="rapidDiscoveryDocName" title="${escapeHtml(doc.name || getAnyDocumentOriginalFileName(doc) || 'Document')}">${escapeHtml(doc.name || getAnyDocumentOriginalFileName(doc) || 'Document')}</div></td><td>${escapeHtml(formatDateForDisplay(rapidDiscoveryUploadDate(doc)) || rapidDiscoveryUploadDate(doc) || 'No date')}</td>${rfpReqs.map(req => `<td><button type="button" class="rapidDiscoveryCellBtn" data-rapid-assign-doc="${escapeHtml(doc.id)}" data-rapid-assign-req="${escapeHtml(req.id)}">Add to Req. ${escapeHtml(req.request_number || '')}</button></td>`).join('')}</tr>`).join('') : '<tr><td colspan="999"><div class="empty">All selected documents have been assigned. Use “Choose different documents” to add more.</div></td></tr>';
+    return `<div class="rapidDiscoveryBox"><div class="rapidDiscoveryTop"><div><button type="button" class="rapidDiscoveryLink">Rapid Discovery Responses</button><div class="hint">Click the intersection for the document and RFP request. The document will disappear from this worksheet and be added as a responsive document for that request.</div></div><button type="button" class="btnGhost" data-rapid-reset="${escapeHtml(set.id)}">Choose different documents</button></div><div class="rapidDiscoveryTableWrap"><table class="rapidDiscoveryTable"><thead>${head}</thead><tbody>${rows}</tbody></table></div></div>`;
+  }
+
 
   async function loadDiscoveryData(){
     if(!window.supabase || !getCaseId()){ loadDiscoveryLocal(); return; }
@@ -12281,7 +12392,7 @@ const endpoint = `${SUPABASE_URL}/functions/v1/finalize-exhibit-packet`;
     if(!set){ host.innerHTML = '<div class="empty">No discovery set selected.</div>'; return; }
     const reqs = discoveryRequestsForSet(set.id, true);
     const instructions = String(set.client_instructions || discoveryInstructionHtmlFor(set.discovery_type) || '').trim();
-    const topInstructions = `<div class="discoveryInstructionsBox"><div class="label">Attorney instructions</div><div class="discoveryReqText">${instructions || 'None'}</div></div>`;
+    const topInstructions = `<div class="discoveryInstructionsBox"><div class="label">Attorney instructions</div><div class="discoveryReqText">${instructions || 'None'}</div></div>${renderRapidDiscoveryResponses(set)}`;
     host.innerHTML = topInstructions + (reqs.length ? reqs.map(req => {
       const resp = getDiscoveryResponse(req.id);
       const isRfp = normalizeDiscoveryType(req.request_type) === 'production';
@@ -12299,6 +12410,10 @@ const endpoint = `${SUPABASE_URL}/functions/v1/finalize-exhibit-packet`;
     host.querySelectorAll('[data-discovery-rfp-upload-notes]').forEach(el => el.addEventListener('blur', () => updateDiscoveryResponse(el.getAttribute('data-discovery-rfp-upload-notes'), { rfp_upload_notes:el.value || '' })));
     host.querySelectorAll('[data-discovery-open-upload]').forEach(btn => btn.addEventListener('click', () => openDiscoveryDocumentModal(btn.getAttribute('data-discovery-open-upload'))));
     host.querySelectorAll('[data-discovery-open-bulk-upload]').forEach(btn => btn.addEventListener('click', () => openDiscoveryBulkDocumentPicker(btn.getAttribute('data-discovery-open-bulk-upload'))));
+    host.querySelectorAll('[data-rapid-start]').forEach(btn => btn.addEventListener('click', () => startRapidDiscoveryPick(btn.getAttribute('data-rapid-start'))));
+    host.querySelectorAll('[data-rapid-reset]').forEach(btn => btn.addEventListener('click', () => resetRapidDiscoveryPick(btn.getAttribute('data-rapid-reset'))));
+    host.querySelectorAll('[data-rapid-sort]').forEach(btn => btn.addEventListener('click', () => setRapidDiscoverySort(btn.getAttribute('data-rapid-sort'), btn.getAttribute('data-sort-next'))));
+    host.querySelectorAll('[data-rapid-assign-doc]').forEach(btn => btn.addEventListener('click', () => attachExistingMatterDocumentToDiscoveryRequest(btn.getAttribute('data-rapid-assign-req'), btn.getAttribute('data-rapid-assign-doc'))));
     host.querySelectorAll('[data-discovery-need-help]').forEach(btn => btn.addEventListener('click', () => setDiscoveryNeedHelp(btn.getAttribute('data-discovery-need-help'), !getDiscoveryNeedHelp(btn.getAttribute('data-discovery-need-help')))));
   }
 
