@@ -12847,12 +12847,43 @@ const endpoint = `${SUPABASE_URL}/functions/v1/finalize-exhibit-packet`;
     const ext = discoveryKnownFileExtension(file || {}, fallbackUrl);
     return ext ? `${safe}${ext}` : safe;
   }
-  function discoveryDocumentDefaultDownloadName(set, req, file){
-    const original = String(file?.file_name || file?.name || file?.file_path || 'document').split('/').pop();
-    const ext = discoveryKnownFileExtension(file || {});
-    const base = original.replace(/\.[a-zA-Z0-9]{1,8}$/, '');
+  function discoveryDocumentForDiscoveryFile(file){
+    const docs = Array.isArray(window.loadedDocuments) ? window.loadedDocuments : [];
+    const docId = String(file?.document_id || file?.documentId || '');
+    if(docId){
+      const byId = docs.find(d => String(d.id || '') === docId);
+      if(byId) return byId;
+    }
+    const filePath = String(file?.file_path || '');
+    if(filePath){
+      const byPath = docs.find(d => String(d.file_path || '') === filePath);
+      if(byPath) return byPath;
+    }
+    const fileName = String(file?.file_name || '');
+    if(fileName){
+      const byOriginal = docs.find(d => String(d.original_file_name || '') === fileName || String(d.file_name || '') === fileName);
+      if(byOriginal) return byOriginal;
+    }
+    return null;
+  }
+  function discoveryDocumentDisplayName(file){
+    const doc = discoveryDocumentForDiscoveryFile(file);
+    return String(doc?.name || file?.document_name || file?.doc_name || file?.name || file?.file_name || 'Document').trim() || 'Document';
+  }
+  function discoveryNameExtensionForFile(file, url=''){
+    return discoveryKnownFileExtension(file || {}, url || file?.file_path || '') || discoveryExtensionFromPathOrUrl(file?.file_name || file?.file_path || url || '');
+  }
+  function discoveryDownloadNameForRow(set, req, file, appearanceNumber=null){
+    const displayName = discoveryDocumentDisplayName(file);
+    const ext = discoveryNameExtensionForFile(file);
+    const cleanDisplay = sanitizeFileName(displayName).replace(/\.[a-zA-Z0-9]{1,8}$/, '') || 'Document';
     const num = String(req?.request_number || '').replace(/[^a-zA-Z0-9._-]+/g,'_') || 'no_number';
-    return ensureDiscoveryDownloadExtension(`${discoveryDateShort(set?.date_received || set?.created_at || '')}_${getDiscoveryAbbr(req?.request_type || set?.discovery_type || '')}_req.${num}_${base}`, file);
+    const prefix = appearanceNumber ? `${String(appearanceNumber).padStart(3,'0')}_` : '';
+    const base = `${prefix}${discoveryDateShort(set?.date_received || set?.created_at || '')}_${getDiscoveryAbbr(req?.request_type || set?.discovery_type || '')}_req.${num}_${cleanDisplay}`;
+    return ensureDiscoveryDownloadExtension(base, { ...(file || {}), file_name: cleanDisplay + (ext || '') }, file?.file_path || '');
+  }
+  function discoveryDocumentDefaultDownloadName(set, req, file){
+    return discoveryDownloadNameForRow(set, req, file, null);
   }
   function prefixedDiscoveryFileName(set, req, originalName){ return discoveryDocumentDefaultDownloadName(set, req, { file_name: originalName || 'file' }); }
   function discoveryWordBlob(set, includeAttorneyNotes=true){
@@ -12875,7 +12906,12 @@ const endpoint = `${SUPABASE_URL}/functions/v1/finalize-exhibit-packet`;
   function discoveryUploadedDocumentRows(set){
     const reqs = discoveryRequestsForSet(set.id, true);
     const rows = [];
-    reqs.forEach(req => discoveryFilesForRequest(req.id).filter(f => f.file_path).forEach(f => rows.push({ req, file:f, url:getDocumentPublicUrl(f.file_path), defaultName:discoveryDocumentDefaultDownloadName(set, req, f) })));
+    reqs.forEach(req => discoveryFilesForRequest(req.id).filter(f => f.file_path).forEach(f => rows.push({ req, file:f, url:getDocumentPublicUrl(f.file_path) })));
+    rows.forEach((row, idx) => {
+      row.appearanceNumber = idx + 1;
+      row.displayName = `${idx + 1}. ${discoveryDocumentDisplayName(row.file)}`;
+      row.defaultName = discoveryDownloadNameForRow(set, row.req, row.file, row.appearanceNumber);
+    });
     return rows;
   }
   function openDiscoveryUploadedDocsWindow(setId){
