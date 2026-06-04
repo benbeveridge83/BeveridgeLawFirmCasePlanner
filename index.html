@@ -12690,14 +12690,18 @@ const endpoint = `${SUPABASE_URL}/functions/v1/finalize-exhibit-packet`;
     renderDiscovery();
   }
   window.resetDiscoveryHelpForSet = resetDiscoveryHelpForSet;
-  function openDiscoveryResponsesSmallWindow(setId){
+  function openDiscoveryResponsesSmallWindow(setId, responseKind='original'){
     const set = getDiscoverySetById(setId);
     if(!set){ alert('Select a discovery set first.'); return; }
-    const win = window.open('', '_blank', 'width=420,height=320,scrollbars=yes,resizable=yes');
+    const isSupplemental = String(responseKind || '').toLowerCase() === 'supplemental';
+    const win = window.open('', '_blank', 'width=460,height=390,scrollbars=yes,resizable=yes');
     if(!win){ alert('Please allow popups to open response options.'); return; }
-    const safeId = String(set.id).replace(/'/g, "\\'");
+    const safeId = String(set.id).replace(/'/g, "\'");
+    const title = isSupplemental ? 'Supplemental Responses' : 'Responses';
+    const note = isSupplemental ? 'Use these when you are adding documents or updating answers after the original responses were served.' : 'Use these for the original discovery response package.';
+    const flag = isSupplemental ? ', true' : '';
     win.document.open();
-    win.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>Responses</title><style>body{font-family:Arial,sans-serif;margin:20px;color:#0f172a}button{display:block;width:100%;margin:8px 0;border:1px solid #e2e8f0;border-radius:12px;background:#fff;padding:10px 12px;font-weight:700;text-align:left;cursor:pointer}button:hover{background:#f8fbff}.primary{background:#2563eb;color:#fff}.hint{color:#64748b;font-size:13px}</style></head><body><h2>Responses</h2><p class="hint">${escapeHtml(set.title || '')}</p><button onclick="window.opener.downloadDiscoveryWordForSet('${safeId}', true)">Download responses with Notes to attorney</button><button onclick="window.opener.downloadDiscoveryWordForSet('${safeId}', false)">Download responses without attorney notes</button><button onclick="window.opener.openDiscoveryUploadedDocsWindow('${safeId}')">Uploaded documents</button><button onclick="window.opener.convertDiscoveryDocumentsToPdfsZip('${safeId}')">Convert to PDFs</button><button onclick="window.opener.openDiscoveryLogWindow('${safeId}')">Discovery log</button></body></html>`);
+    win.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>${title}</title><style>body{font-family:Arial,sans-serif;margin:20px;color:#0f172a}button{display:block;width:100%;margin:8px 0;border:1px solid #e2e8f0;border-radius:12px;background:#fff;padding:10px 12px;font-weight:700;text-align:left;cursor:pointer}button:hover{background:#f8fbff}.primary{background:#2563eb;color:#fff}.hint{color:#64748b;font-size:13px;line-height:1.35}</style></head><body><h2>${title}</h2><p class="hint">${escapeHtml(set.title || '')}</p><p class="hint">${escapeHtml(note)}</p><button onclick="window.opener.downloadDiscoveryWordForSet('${safeId}', true${flag})">Download ${isSupplemental ? 'supplemental ' : ''}responses with Notes to attorney</button><button onclick="window.opener.downloadDiscoveryWordForSet('${safeId}', false${flag})">Download ${isSupplemental ? 'supplemental ' : ''}responses without attorney notes</button><button onclick="window.opener.openDiscoveryUploadedDocsWindow('${safeId}', ${isSupplemental ? 'true' : 'false'})">${isSupplemental ? 'Supplemental uploaded documents' : 'Uploaded documents'}</button><button onclick="window.opener.convertDiscoveryDocumentsToPdfsZip('${safeId}', ${isSupplemental ? 'true' : 'false'})">Convert ${isSupplemental ? 'supplemental ' : ''}documents to PDFs</button><button onclick="window.opener.openDiscoveryLogWindow('${safeId}')">Discovery log</button></body></html>`);
     win.document.close();
   }
 
@@ -12710,11 +12714,11 @@ const endpoint = `${SUPABASE_URL}/functions/v1/finalize-exhibit-packet`;
       const selected = set.id === discoveryState.selectedSetId;
       const counts = discoveryCompletionCounts(set);
       const needsHelp = discoverySetNeedsHelp(set);
-      const cells = types.map(t => normalizeDiscoveryType(set.discovery_type) === t ? `<td class="center"><div class="discoveryCellStack"><button type="button" class="discoverySetNameBtn" data-discovery-open-set="${escapeHtml(set.id)}" data-discovery-open-mode="client" title="${escapeHtml(set.title || '')}">Click here to Respond to Discovery</button><div class="hint">${counts.complete} out of ${counts.total} questions responded to</div><button type="button" class="discoveryResponsesMenuBtn" data-discovery-responses-menu="${escapeHtml(set.id)}">Responses ▾</button>${needsHelp ? `<button type="button" class="btnGhost mini" data-discovery-reset-help="${escapeHtml(set.id)}">Reset</button>` : ''}</div></td>` : '<td></td>').join('');
+      const cells = types.map(t => normalizeDiscoveryType(set.discovery_type) === t ? `<td class="center"><div class="discoveryCellStack"><button type="button" class="discoverySetNameBtn" data-discovery-open-set="${escapeHtml(set.id)}" data-discovery-open-mode="client" title="${escapeHtml(set.title || '')}">Click here to Respond to Discovery</button><button type="button" class="discoverySetNameBtn" data-discovery-open-set="${escapeHtml(set.id)}" data-discovery-open-mode="supplemental" title="${escapeHtml(set.title || '')}">Click here to Supplement Discovery</button><div class="hint">${counts.complete} out of ${counts.total} questions responded to</div><div class="row" style="justify-content:center;gap:10px"><button type="button" class="discoveryResponsesMenuBtn" data-discovery-responses-menu="${escapeHtml(set.id)}" data-discovery-responses-kind="original">Responses ▾</button><button type="button" class="discoveryResponsesMenuBtn" data-discovery-responses-menu="${escapeHtml(set.id)}" data-discovery-responses-kind="supplemental">Supplemental Responses ▾</button></div>${needsHelp ? `<button type="button" class="btnGhost mini" data-discovery-reset-help="${escapeHtml(set.id)}">Reset</button>` : ''}</div></td>` : '<td></td>').join('');
       return `<tr class="${needsHelp ? 'discoverySetNeedsHelpRow' : ''}" style="${selected ? 'background:#f8fbff' : ''}"><td>${escapeHtml(formatDateForDisplay(set.date_received || '') || set.date_received || '')}</td><td>${renderDiscoveryDueCell(set)}</td>${cells}</tr>`;
     }).join('') + '</tbody></table></div>';
     host.querySelectorAll('[data-discovery-open-set]').forEach(btn => btn.addEventListener('click', ()=> selectDiscoverySet(btn.getAttribute('data-discovery-open-set'), btn.getAttribute('data-discovery-open-mode') || 'client')));
-    host.querySelectorAll('[data-discovery-responses-menu]').forEach(btn => btn.addEventListener('click', (e)=>{ e.preventDefault(); e.stopPropagation(); openDiscoveryResponsesSmallWindow(btn.getAttribute('data-discovery-responses-menu')); }));
+    host.querySelectorAll('[data-discovery-responses-menu]').forEach(btn => btn.addEventListener('click', (e)=>{ e.preventDefault(); e.stopPropagation(); openDiscoveryResponsesSmallWindow(btn.getAttribute('data-discovery-responses-menu'), btn.getAttribute('data-discovery-responses-kind') || 'original'); }));
     host.querySelectorAll('[data-discovery-reset-help]').forEach(btn => btn.addEventListener('click', (e)=>{ e.preventDefault(); e.stopPropagation(); resetDiscoveryHelpForSet(btn.getAttribute('data-discovery-reset-help')); }));
     updateDiscoverySourceViewButton();
   }
@@ -12736,7 +12740,11 @@ const endpoint = `${SUPABASE_URL}/functions/v1/finalize-exhibit-packet`;
   function renderDiscoveryClientList(){
     const host = $('discoveryClientList'); if(!host) return;
     const set = getSelectedDiscoverySet();
-    $('discoveryClientSelectedPill') && ($('discoveryClientSelectedPill').textContent = set ? `${getDiscoveryLabel(set.discovery_type)}: ${set.title || 'Untitled'}` : 'No set selected');
+    $('discoveryClientSelectedPill') && ($('discoveryClientSelectedPill').textContent = set ? `${discoveryState.mode === 'supplemental' ? 'Supplementing ' : ''}${getDiscoveryLabel(set.discovery_type)}: ${set.title || 'Untitled'}` : 'No set selected');
+    const clientPaneTitle = document.querySelector('#discoveryClientPane h2');
+    if(clientPaneTitle) clientPaneTitle.textContent = discoveryState.mode === 'supplemental' ? 'Supplement discovery page' : 'Client response page';
+    const clientPaneHint = document.querySelector('#discoveryClientPane .hint');
+    if(clientPaneHint) clientPaneHint.textContent = discoveryState.mode === 'supplemental' ? 'Add new documents or update answers tied to the same requests/folders. These can be gathered from the Supplemental Responses button on the dashboard.' : 'Answer each request, add questions/comments for your attorney, and attach documents tied to that individual request.';
     if(!set){ host.innerHTML = '<div class="empty">No discovery set selected.</div>'; return; }
     const reqs = discoveryRequestsForSet(set.id, true);
     const discoveryNumberedNames = new Map(discoveryUploadedDocumentRows(set).map(row => [discoveryFileStableKey(row.file), row.defaultName]));
@@ -12891,21 +12899,22 @@ const endpoint = `${SUPABASE_URL}/functions/v1/finalize-exhibit-packet`;
     return discoveryDownloadNameForRow(set, req, file, null);
   }
   function prefixedDiscoveryFileName(set, req, originalName){ return discoveryDocumentDefaultDownloadName(set, req, { file_name: originalName || 'file' }); }
-  function discoveryWordBlob(set, includeAttorneyNotes=true){
+  function discoveryWordBlob(set, includeAttorneyNotes=true, supplemental=false){
     const reqs = discoveryRequestsForSet(set.id, true);
     const discoveryNumberedNames = new Map(discoveryUploadedDocumentRows(set).map(row => [discoveryFileStableKey(row.file), row.defaultName]));
     const rows = reqs.map(req => { const resp = getDiscoveryResponse(req.id); const files = discoveryFilesForRequest(req.id); const answer = normalizeDiscoveryType(req.request_type) === 'production' ? (resp.rfp_status || '') : (resp.client_response || ''); return `<h3>${escapeHtml(getDiscoveryLabel(req.request_type))} No. ${escapeHtml(req.request_number || '')}</h3><p><b>Request:</b> ${escapeHtml(req.request_text || '')}</p><p><b>Response required:</b> ${discoveryRequestRequiresResponse(req) ? 'Yes' : 'No'}</p><p><b>Attorney comments to client:</b> ${escapeHtml(req.attorney_notes || 'None')}</p><p><b>Client response:</b> ${escapeHtml(answer || '')}</p>${resp.rfp_upload_notes ? `<p><b>Uploaded-to note:</b> ${escapeHtml(resp.rfp_upload_notes)}</p>` : ''}${includeAttorneyNotes ? `<p><b>Notes to attorney:</b> ${escapeHtml(resp.client_comments || '')}</p>` : ''}<p><b>Files:</b> ${files.map(f => escapeHtml(discoveryNumberedNames.get(discoveryFileStableKey(f)) || f.file_name || '')).join(', ') || 'None'}</p><hr>`; }).join('');
-    const html = `<!doctype html><html><head><meta charset="utf-8"><title>${escapeHtml(set.title || 'Discovery Responses')}</title></head><body><h1>${escapeHtml(set.title || 'Discovery Responses')}</h1><p><b>Type:</b> ${escapeHtml(getDiscoveryLabel(set.discovery_type))}</p><p><b>Date served/received:</b> ${escapeHtml(formatDateForDisplay(set.date_received || '') || '')}</p><p><b>Client due:</b> ${escapeHtml(formatDateForDisplay(set.client_due_date || '') || '')}</p><h2>Attorney instructions</h2><p>${escapeHtml(set.client_instructions || 'None')}</p>${rows}</body></html>`;
+    const heading = supplemental ? `Supplemental Responses - ${set.title || 'Discovery Responses'}` : (set.title || 'Discovery Responses');
+    const html = `<!doctype html><html><head><meta charset="utf-8"><title>${escapeHtml(heading)}</title></head><body><h1>${escapeHtml(heading)}</h1>${supplemental ? '<p><b>Supplemental discovery:</b> This package is for new or updated responses/documents added after the original discovery response.</p>' : ''}<p><b>Type:</b> ${escapeHtml(getDiscoveryLabel(set.discovery_type))}</p><p><b>Date served/received:</b> ${escapeHtml(formatDateForDisplay(set.date_received || '') || '')}</p><p><b>Client due:</b> ${escapeHtml(formatDateForDisplay(set.client_due_date || '') || '')}</p><h2>Attorney instructions</h2><p>${escapeHtml(set.client_instructions || 'None')}</p>${rows}</body></html>`;
     return new Blob([html], { type:'application/msword' });
   }
-  function downloadDiscoveryWordForSet(setId=null, includeAttorneyNotes=true){
+  function downloadDiscoveryWordForSet(setId=null, includeAttorneyNotes=true, supplemental=false){
     const set = setId ? getDiscoverySetById(setId) : getSelectedDiscoverySet();
     if(!set){ alert('Select a discovery set first.'); return; }
-    const blob = discoveryWordBlob(set, includeAttorneyNotes);
+    const blob = discoveryWordBlob(set, includeAttorneyNotes, supplemental);
     const suffix = includeAttorneyNotes ? 'with_notes_to_attorney' : 'without_attorney_notes';
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
-    a.download = `${sanitizeFileName(set.title || 'discovery_responses')}_${suffix}.doc`;
+    a.download = `${sanitizeFileName(set.title || 'discovery_responses')}_${supplemental ? 'supplemental_' : ''}${suffix}.doc`;
     document.body.appendChild(a); a.click();
     setTimeout(()=>{ URL.revokeObjectURL(a.href); a.remove(); }, 1000);
   }
@@ -12921,7 +12930,7 @@ const endpoint = `${SUPABASE_URL}/functions/v1/finalize-exhibit-packet`;
     });
     return rows;
   }
-  function openDiscoveryUploadedDocsWindow(setId){
+  function openDiscoveryUploadedDocsWindow(setId, supplemental=false){
     const set = getDiscoverySetById(setId);
     if(!set){ alert('Select a discovery set first.'); return; }
     const reqs = discoveryRequestsForSet(set.id, true);
@@ -12933,7 +12942,7 @@ const endpoint = `${SUPABASE_URL}/functions/v1/finalize-exhibit-packet`;
       return `<section style="border:1px solid #e2e8f0;border-radius:14px;padding:14px;margin:12px 0;background:#fff"><h2 style="margin:0 0 8px 0">Request ${escapeHtml(req.request_number || '')}</h2><div style="white-space:pre-wrap;margin-bottom:10px">${escapeHtml(req.request_text || '')}</div>${rows.length ? `<ul>${rows.map(row => `<li><a target="_blank" href="${escapeHtml(row.url)}">${escapeHtml(row.defaultName)}</a></li>`).join('')}</ul>` : '<p style="color:#64748b">No documents uploaded for this request.</p>'}</section>`;
     }).join('');
     win.document.open();
-    win.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>Uploaded discovery documents</title><style>body{font-family:Arial,sans-serif;margin:24px;color:#0f172a}button{border:1px solid #e2e8f0;border-radius:999px;background:#2563eb;color:white;padding:10px 14px;font-weight:700;cursor:pointer}.hint{color:#64748b}</style></head><body><h1>Uploaded documents</h1><p class="hint">${escapeHtml(set.title || '')}</p><button onclick="window.opener.openDiscoveryDocumentDownloadWindow('${escapeHtml(set.id)}')">Download documents</button>${sections}</body></html>`);
+    win.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>${supplemental ? 'Supplemental uploaded discovery documents' : 'Uploaded discovery documents'}</title><style>body{font-family:Arial,sans-serif;margin:24px;color:#0f172a}button{border:1px solid #e2e8f0;border-radius:999px;background:#2563eb;color:white;padding:10px 14px;font-weight:700;cursor:pointer}.hint{color:#64748b}</style></head><body><h1>${supplemental ? 'Supplemental uploaded documents' : 'Uploaded documents'}</h1><p class="hint">${escapeHtml(set.title || '')}</p><button onclick="window.opener.openDiscoveryDocumentDownloadWindow('${escapeHtml(set.id)}')">Download documents</button>${sections}</body></html>`);
     win.document.close();
   }
   function discoveryLogRowsForSet(set){
@@ -13114,7 +13123,7 @@ const endpoint = `${SUPABASE_URL}/functions/v1/finalize-exhibit-packet`;
     }
     return await discoveryCreatePlaceholderPdf(name, 'This audio, video, or other file type could not be converted directly to PDF in the browser, so this placeholder PDF identifies the original file.');
   }
-  async function convertDiscoveryDocumentsToPdfsZip(setId=null){
+  async function convertDiscoveryDocumentsToPdfsZip(setId=null, supplemental=false){
     const set = setId ? getDiscoverySetById(setId) : getSelectedDiscoverySet();
     if(!set){ alert('Select a discovery set first.'); return; }
     if(!window.JSZip){ alert('JSZip is not available on this page.'); return; }
@@ -13143,7 +13152,7 @@ const endpoint = `${SUPABASE_URL}/functions/v1/finalize-exhibit-packet`;
     const blob = await zip.generateAsync({ type:'blob' });
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
-    a.download = `${sanitizeFileName(set.title || 'discovery_documents')}_pdfs.zip`;
+    a.download = `${sanitizeFileName(set.title || 'discovery_documents')}_${supplemental ? 'supplemental_' : ''}pdfs.zip`;
     document.body.appendChild(a); a.click();
     setTimeout(()=>{ URL.revokeObjectURL(a.href); a.remove(); }, 1000);
   }
@@ -13154,19 +13163,19 @@ const endpoint = `${SUPABASE_URL}/functions/v1/finalize-exhibit-packet`;
   window.downloadDiscoveryLogWord = downloadDiscoveryLogWord;
   window.discoveryDownloadNamedFilesZip = discoveryDownloadNamedFilesZip;
   window.convertDiscoveryDocumentsToPdfsZip = convertDiscoveryDocumentsToPdfsZip;
-  async function downloadDiscoveryResponsesBundle(setId=null){
+  async function downloadDiscoveryResponsesBundle(setId=null, supplemental=false){
     const set = setId ? getDiscoverySetById(setId) : getSelectedDiscoverySet();
     if(!set){ alert('Select a discovery set first.'); return; }
     if(!window.JSZip){ alert('JSZip is not available on this page.'); return; }
     const zip = new JSZip();
-    zip.file(`${sanitizeFileName(set.title || 'discovery_responses')}_responses.doc`, discoveryWordBlob(set, true));
+    zip.file(`${sanitizeFileName(set.title || 'discovery_responses')}_${supplemental ? 'supplemental_' : ''}responses.doc`, discoveryWordBlob(set, true, supplemental));
     const plan = discoveryUploadedDocumentRows(set);
     for(const item of plan){
       try{ const res = await fetch(item.url); if(!res.ok) throw new Error('Could not download ' + item.url); zip.file(item.defaultName, await res.blob()); }
       catch(e){ zip.file(`ERROR_${item.defaultName}.txt`, String(e?.message || e)); }
     }
     const blob = await zip.generateAsync({ type:'blob' });
-    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `${sanitizeFileName(set.title || 'discovery_responses')}_responses_and_files.zip`; document.body.appendChild(a); a.click(); setTimeout(()=>{ URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `${sanitizeFileName(set.title || 'discovery_responses')}_${supplemental ? 'supplemental_' : ''}responses_and_files.zip`; document.body.appendChild(a); a.click(); setTimeout(()=>{ URL.revokeObjectURL(a.href); a.remove(); }, 1000);
   }
   async function downloadDiscoveryFilesZip(){ return downloadDiscoveryResponsesBundle(); }
 
@@ -13221,11 +13230,11 @@ const endpoint = `${SUPABASE_URL}/functions/v1/finalize-exhibit-packet`;
     if(!attorneyAllowed && discoveryState.mode === 'attorney') discoveryState.mode = 'client';
     const attorneyPane = $('discoveryAttorneyPane'); const clientPane = $('discoveryClientPane'); const completionPane = $('discoveryCompletionPane');
     if(attorneyPane) attorneyPane.style.display = discoveryState.mode === 'attorney' && attorneyAllowed ? 'grid' : 'none';
-    if(clientPane) clientPane.style.display = discoveryState.mode === 'client' ? 'grid' : 'none';
+    if(clientPane) clientPane.style.display = (discoveryState.mode === 'client' || discoveryState.mode === 'supplemental') ? 'grid' : 'none';
     if(completionPane) completionPane.style.display = discoveryState.mode === 'completion' ? 'grid' : 'none';
     if($('discoveryAttorneyModeBtn')){ $('discoveryAttorneyModeBtn').style.display = attorneyAllowed ? '' : 'none'; $('discoveryAttorneyModeBtn').className = discoveryState.mode === 'attorney' ? 'btnPrimary' : 'btnGhost'; }
     if($('discoveryInstructionsBtn')) $('discoveryInstructionsBtn').style.display = attorneyAllowed ? '' : 'none';
-    if($('discoveryClientModeBtn')) $('discoveryClientModeBtn').className = discoveryState.mode === 'client' || !attorneyAllowed ? 'btnPrimary' : 'btnGhost';
+    if($('discoveryClientModeBtn')) $('discoveryClientModeBtn').className = (discoveryState.mode === 'client' || discoveryState.mode === 'supplemental' || !attorneyAllowed) ? 'btnPrimary' : 'btnGhost';
     if($('discoveryCompletionModeBtn')) $('discoveryCompletionModeBtn').className = discoveryState.mode === 'completion' ? 'btnPrimary' : 'btnGhost';
     ensureDiscoveryDueDefault(); populateDiscoverySourceDocumentSelect(); renderDiscoveryDashboard(); renderDiscoveryAttorneyList(); renderDiscoveryClientList(); renderDiscoveryCompletion();
   }
