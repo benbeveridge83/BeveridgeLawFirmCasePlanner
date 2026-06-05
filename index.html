@@ -15037,6 +15037,279 @@ const endpoint = `${SUPABASE_URL}/functions/v1/finalize-exhibit-packet`;
     setInterval(() => { try{ addResetButton(); }catch(e){} }, 1500);
   })();
 
+
+
+  /* EMERGENCY SUPPLEMENTAL DISCOVERY FIX 2026-06-05
+     This override is intentionally last. It fixes the actual broken path:
+     chooser -> worksheet URL must carry rapidPhase, and response windows/logs must pass phase. */
+  (function(){
+    if(window.__finalSupplementDiscoveryFix20260605) return;
+    window.__finalSupplementDiscoveryFix20260605 = true;
+
+    function fsdOrd(n){ n=Number(n||1); const v=n%100; if(v>=11&&v<=13) return n+'th'; const l=n%10; return n+(l===1?'st':l===2?'nd':l===3?'rd':'th'); }
+    function fsdPhaseNum(phase){
+      if(typeof discoveryPhaseNumber === 'function') return discoveryPhaseNumber(phase);
+      const m=String(phase||'').match(/supp(?:lement)?\s*([0-9]+)/i)||String(phase||'').match(/^([0-9]+)$/); return m?Math.max(1,Number(m[1]||1)):0;
+    }
+    function fsdPhaseKey(n){ return Number(n||0)>0 ? 'supp'+Number(n) : 'original'; }
+    function fsdPhaseLabel(phase){ const n=fsdPhaseNum(phase); return n ? fsdOrd(n)+' Supplemental' : 'Original Response'; }
+    function fsdSet(setId){ return (typeof getDiscoverySetById === 'function' ? getDiscoverySetById(setId) : null) || (discoveryState.sets||[]).find(s=>String(s.id)===String(setId)); }
+    function fsdFolder(set, phase){
+      if(typeof discoveryPhaseFolderName === 'function') return discoveryPhaseFolderName(set, phase);
+      const n=fsdPhaseNum(phase); return n ? fsdOrd(n)+'Supp'+String(set?.title||'rfp').replace(/[^a-z0-9]+/gi,'') : (set?.title||'Discovery');
+    }
+    function fsdSetActive(setId, phase){
+      phase = phase || 'original';
+      if(typeof setActiveDiscoveryPhaseForSet === 'function') setActiveDiscoveryPhaseForSet(setId, phase);
+      if(typeof hardSuppSetActivePhase === 'function') hardSuppSetActivePhase(setId, phase);
+      discoveryState.activeDiscoveryPhaseBySet = discoveryState.activeDiscoveryPhaseBySet || {};
+      discoveryState.activeDiscoveryPhaseBySet[String(setId||'')] = phase;
+      const n=fsdPhaseNum(phase);
+      if(n){
+        discoveryState.supplementPhasesBySet = discoveryState.supplementPhasesBySet || {};
+        const k=String(setId||'');
+        const arr=Array.isArray(discoveryState.supplementPhasesBySet[k]) ? discoveryState.supplementPhasesBySet[k].slice() : [];
+        const key=fsdPhaseKey(n);
+        if(!arr.includes(key)) arr.push(key);
+        discoveryState.supplementPhasesBySet[k]=arr.sort((a,b)=>fsdPhaseNum(a)-fsdPhaseNum(b));
+      }
+      try{ saveDiscoveryLocal(); }catch(e){}
+    }
+    function fsdUrlPhase(setId){
+      try{ const q=new URLSearchParams(window.location.search||''); if(q.get('rapidPhase') && (!q.get('rapidSet') || String(q.get('rapidSet'))===String(setId))) return q.get('rapidPhase'); }catch(e){}
+      return '';
+    }
+    function fsdActive(setId){ return fsdUrlPhase(setId) || (discoveryState.activeDiscoveryPhaseBySet||{})[String(setId||'')] || 'original'; }
+    function fsdFilePhase(file){
+      const raw=String(file?.discovery_phase||file?.response_phase||file?.phase||'').toLowerCase();
+      const n=Number(file?.supplement_number||file?.supplemental_number||file?.supplementNo||0)||fsdPhaseNum(raw);
+      if(n) return fsdPhaseKey(n);
+      const kind=String(file?.response_kind||file?.responseKind||file?.upload_phase||'').toLowerCase();
+      if(kind==='supplemental' || file?.is_supplemental===true || file?.supplemental===true || (typeof isSupplementalDiscoveryFile==='function' && isSupplementalDiscoveryFile(file))) return 'supp1';
+      return 'original';
+    }
+    function fsdFileMatches(file, phase){
+      phase=phase||'original'; const n=fsdPhaseNum(phase); const fp=fsdFilePhase(file); const fn=fsdPhaseNum(fp); return n ? fn===n : !fn;
+    }
+    fileMatchesDiscoveryPhase = fsdFileMatches;
+
+    openRapidDiscoveryWorksheet = function(setId, phaseArg){
+      const phase = phaseArg || fsdActive(setId) || 'original';
+      fsdSetActive(setId, phase);
+      const url = new URL(window.location.href);
+      const caseId = getCaseId && getCaseId();
+      if(caseId) url.searchParams.set('case', caseId);
+      url.searchParams.set('view','discovery');
+      url.searchParams.set('rapidSet', String(setId||''));
+      url.searchParams.set('rapidOnly','1');
+      if(phase && phase !== 'original') url.searchParams.set('rapidPhase', phase); else url.searchParams.delete('rapidPhase');
+      url.searchParams.delete('worksheet');
+      const opened = window.open(url.toString(), '_blank');
+      if(!opened) window.location.href = url.toString();
+    };
+    window.openRapidDiscoveryWorksheet = openRapidDiscoveryWorksheet;
+
+    window.openDiscoveryPhaseWorksheet = function(setId, phase){
+      const p = phase || 'original';
+      fsdSetActive(setId, p);
+      openRapidDiscoveryWorksheet(setId, p);
+    };
+
+    const oldEnsure = ensureClientDiscoveryResponseTagsForSet;
+    ensureClientDiscoveryResponseTagsForSet = async function(set, reqs=[]){
+      const phase = set?.__discoveryPhase || set?.__discovery_phase || fsdActive(set?.id || discoveryState.selectedSetId || '') || 'original';
+      const root = await ensureDiscoveryTag('Client Discovery Responses', null);
+      if(!root) return {};
+      const setTag = await ensureDiscoveryTag(fsdFolder(set, phase), root.id);
+      const reqTags = {};
+      if(setTag){
+        for(const req of (reqs||[])){
+          const num=String(req?.request_number||'').trim()||'x';
+          const name = fsdPhaseNum(phase) ? (fsdOrd(fsdPhaseNum(phase)).toLowerCase()+'supp req '+num) : (typeof discoveryRequestTagName === 'function' ? discoveryRequestTagName(req) : 'Req. '+num);
+          const reqTag = await ensureDiscoveryTag(name, setTag.id);
+          if(reqTag) reqTags[req.id]=reqTag;
+        }
+      }
+      return {root,setTag,reqTags};
+    };
+
+    applyDiscoveryTagsToDocument = async function(docId, set, req){
+      const phase = set?.__discoveryPhase || set?.__discovery_phase || fsdActive(set?.id || req?.discovery_set_id || discoveryState.selectedSetId || '') || 'original';
+      const taggedSet = {...set, __discoveryPhase:phase};
+      const tags = await ensureClientDiscoveryResponseTagsForSet(taggedSet, [req]);
+      const ids=[tags.root?.id,tags.setTag?.id,tags.reqTags?.[req.id]?.id].filter(Boolean);
+      for(const tagId of ids){ try{ if(window.assignDocumentTag) await window.assignDocumentTag(docId, tagId); }catch(e){ console.warn('Could not assign discovery tag', tagId, e); } }
+      try{
+        if(window.updateDocumentRow && tags.root?.id && tags.setTag?.id){
+          const docs = Array.isArray(state?.documents)?state.documents:[];
+          const doc = docs.find(d=>String(d.id)===String(docId)) || (window.loadedDocuments||[]).find(d=>String(d.id)===String(docId));
+          const existing = Array.isArray(doc?.tagLinks) ? doc.tagLinks.slice() : (Array.isArray(doc?.tag_links) ? doc.tag_links.slice() : []);
+          const additions = [{tagId:tags.root.id, subtagId:tags.setTag.id}];
+          if(tags.reqTags?.[req.id]?.id){ additions.push({tagId:tags.setTag.id, subtagId:tags.reqTags[req.id].id}); additions.push({tagId:tags.root.id, subtagId:tags.reqTags[req.id].id}); }
+          const seen=new Set(); const links=[];
+          existing.concat(additions).forEach(l=>{ const k=String(l.tagId||'')+'::'+String(l.subtagId||''); if(l.tagId && !seen.has(k)){ seen.add(k); links.push({tagId:l.tagId, subtagId:l.subtagId||''}); }});
+          const updated = await window.updateDocumentRow(docId, { tag_links:links });
+          if(updated && doc) doc.tagLinks = links;
+        }
+      }catch(e){ console.warn('Could not save discovery tag links on document', e); }
+    };
+
+    const oldAttach = attachExistingMatterDocumentToDiscoveryRequest;
+    attachExistingMatterDocumentToDiscoveryRequest = async function(requestId, docId, options={}){
+      const req=(discoveryState.requests||[]).find(r=>String(r.id)===String(requestId));
+      const set=req?fsdSet(req.discovery_set_id):null;
+      const phase = options.phase || fsdActive(set?.id || discoveryState.selectedSetId || '') || 'original';
+      const n=fsdPhaseNum(phase);
+      fsdSetActive(set?.id||'', phase);
+      const doc = (typeof getRapidDiscoveryMatterDocuments==='function'?getRapidDiscoveryMatterDocuments():[]).find(d=>String(d.id)===String(docId));
+      if(!doc || !req || !set){ return oldAttach ? oldAttach(requestId, docId, options) : undefined; }
+      const duplicate=(discoveryState.files||[]).some(f=>String(f.request_id)===String(requestId)&&String(f.document_id||'')===String(doc.id)&&fsdFileMatches(f, phase));
+      if(duplicate){ if(!options.deferRender) renderRapidDiscoveryPreservingScroll(set.id); return; }
+      await applyDiscoveryTagsToDocument(doc.id, {...set,__discoveryPhase:phase}, req);
+      const local={ id:discoveryUid(), case_id:getCaseId(), request_id:requestId, response_id:null, document_id:doc.id, file_name:n ? markSupplementalDiscoveryFileName(doc.name||getAnyDocumentOriginalFileName(doc)||'Document') : (doc.name||getAnyDocumentOriginalFileName(doc)||'Document'), file_type:doc.mime_type||doc.mimeType||'', file_size:Number(doc.file_size||doc.fileSize||0)||0, file_path:getAnyDocumentFilePath(doc), created_at:new Date().toISOString(), response_kind:n?'supplemental':'original', is_supplemental:!!n, discovery_phase:phase, supplement_number:n||null };
+      try{
+        if(window.supabase && discoveryState.supabaseOk){
+          let payload={...local};
+          let {data,error}=await supabase.from('discovery_files').insert(payload).select().single();
+          if(error && ['response_kind','is_supplemental','discovery_phase','supplement_number'].some(k=>String(error.message||'').toLowerCase().includes(k))){ const {response_kind,is_supplemental,discovery_phase,supplement_number,...fallback}=payload; const retry=await supabase.from('discovery_files').insert(fallback).select().single(); data=retry.data; error=retry.error; }
+          if(error) throw error;
+          discoveryState.files.push({...local,...(data||{})});
+        } else discoveryState.files.push(local);
+      }catch(e){ console.warn('Could not save discovery file record; saved locally.', e); discoveryState.files.push(local); }
+      saveDiscoveryLocal();
+      if(!options.deferRender) renderRapidDiscoveryPreservingScroll(set.id);
+    };
+
+    const oldCommit = commitRapidDiscoveryAssignments;
+    commitRapidDiscoveryAssignments = async function(setId){
+      const phase = fsdActive(setId) || 'original';
+      const pending = rapidDiscoveryPendingAssignments(setId);
+      if(!pending.length){ alert('Select at least one document/request button first.'); return; }
+      if(typeof saveRapidDiscoveryScrollPosition === 'function') saveRapidDiscoveryScrollPosition(setId);
+      const seen=new Set();
+      for(const item of pending){ const k=String(item.docId)+'::'+String(item.requestId); if(seen.has(k)) continue; seen.add(k); await attachExistingMatterDocumentToDiscoveryRequest(item.requestId, item.docId, {deferRender:true, phase}); }
+      discoveryState.rapidPendingAssignmentsBySet = discoveryState.rapidPendingAssignmentsBySet || {};
+      discoveryState.rapidPendingAssignmentsBySet[setId] = [];
+      discoveryState.rapidPendingAssignmentsBySet[setId+'::'+phase] = [];
+      saveDiscoveryLocal(); renderRapidDiscoveryPreservingScroll(setId);
+    };
+
+    function fsdRowsForPhase(set, phase){
+      const rows = (typeof discoveryUploadedDocumentRows==='function' ? discoveryUploadedDocumentRows(set, phase) : []);
+      return rows.filter(r=>r && r.file && fsdFileMatches(r.file, phase));
+    }
+    discoveryFilesForRequest = function(requestId, phaseArg=null){
+      const req=(discoveryState.requests||[]).find(r=>String(r.id)===String(requestId));
+      const phase = typeof phaseArg==='string' ? phaseArg : (phaseArg===true ? fsdActive(req?.discovery_set_id||discoveryState.selectedSetId||'') : (phaseArg===false ? 'original' : null));
+      if(!phase) return (discoveryState.files||[]).filter(f=>String(f.request_id)===String(requestId));
+      return (discoveryState.files||[]).filter(f=>String(f.request_id)===String(requestId) && fsdFileMatches(f, phase));
+    };
+
+    openDiscoveryLogWindow = function(setId, phaseArg){
+      const set=fsdSet(setId); if(!set){ alert('Select a discovery set first.'); return; }
+      const phase = phaseArg || fsdActive(set.id) || 'original'; fsdSetActive(set.id, phase);
+      const rows = fsdRowsForPhase(set, phase);
+      const grouped=new Map();
+      rows.forEach(row=>{ const key=String(row.req?.id||row.file?.request_id||''); if(!grouped.has(key)) grouped.set(key,{requestNumber:'Request '+(row.req?.request_number||''), fileNames:[]}); grouped.get(key).fileNames.push(row.defaultName || row.file?.file_name || 'Document'); });
+      const body = Array.from(grouped.values()).map(row=>`<tr><td>${escapeHtml(phase==='original'?(set.title||'Discovery request'):fsdFolder(set,phase))}</td><td>${escapeHtml(row.requestNumber)}</td><td><ul style="margin:0;padding-left:18px">${row.fileNames.map(n=>`<li>${escapeHtml(n)}</li>`).join('')}</ul></td></tr>`).join('');
+      const title = phase==='original' ? 'Original Discovery log' : fsdPhaseLabel(phase)+' Discovery log';
+      const safeId=String(set.id).replace(/'/g,"\\'"); const safePhase=String(phase).replace(/'/g,"\\'");
+      const win=window.open('', '_blank', 'width=1200,height=800,scrollbars=yes,resizable=yes'); if(!win){ alert('Please allow popups to view the discovery log.'); return; }
+      win.document.open();
+      win.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>${escapeHtml(title)}</title><style>body{font-family:Arial,sans-serif;margin:24px;color:#0f172a}table{width:100%;border-collapse:collapse}th,td{border-bottom:1px solid #e2e8f0;padding:10px;text-align:left;vertical-align:top}th{background:#f8fbff}button{border:1px solid #e2e8f0;border-radius:999px;background:#2563eb;color:white;padding:10px 14px;font-weight:700;cursor:pointer;margin-right:8px}.hint{color:#64748b}.actions{display:flex;gap:8px;flex-wrap:wrap;margin:14px 0}</style></head><body><h1>${escapeHtml(title)}</h1><p class="hint">${escapeHtml(phase==='original'?(set.title||''):fsdFolder(set,phase))}</p><div class="actions"><button onclick="window.opener.downloadDiscoveryLogCsv('${safeId}','${safePhase}')">Download CSV</button><button onclick="window.opener.downloadDiscoveryLogWord('${safeId}','${safePhase}')">Download Word doc table</button></div><table><thead><tr><th>Discovery request</th><th>Request number</th><th>Associated files</th></tr></thead><tbody>${body || '<tr><td colspan="3">No requests with associated files.</td></tr>'}</tbody></table></body></html>`);
+      win.document.close();
+    };
+    window.openDiscoveryLogWindow = openDiscoveryLogWindow;
+
+    openDiscoveryResponsesSmallWindow = function(setId, phaseArg){
+      const set=fsdSet(setId); if(!set){ alert('Select a discovery set first.'); return; }
+      const phase=phaseArg || fsdActive(set.id) || 'original'; fsdSetActive(set.id, phase);
+      const rows=fsdRowsForPhase(set, phase); const title=phase==='original'?'Responses':fsdPhaseLabel(phase)+' Responses'; const folder=fsdFolder(set, phase);
+      const safeId=String(set.id).replace(/'/g,"\\'"); const safePhase=String(phase).replace(/'/g,"\\'");
+      const win=window.open('', '_blank', 'width=500,height=520,scrollbars=yes,resizable=yes'); if(!win){ alert('Please allow popups to open response options.'); return; }
+      win.document.open();
+      win.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>${escapeHtml(title)}</title><style>body{font-family:Arial,sans-serif;margin:20px;color:#0f172a}button{display:block;width:100%;margin:8px 0;border:1px solid #e2e8f0;border-radius:12px;background:#fff;padding:10px 12px;font-weight:700;text-align:left;cursor:pointer}button:hover{background:#f8fbff}.hint{color:#64748b;font-size:13px;line-height:1.35}</style></head><body><h2>${escapeHtml(title)}</h2><p class="hint">${escapeHtml(folder)}</p><p class="hint">${phase==='original'?'Original response package.':rows.length+' supplemental document(s). These options only include requests where supplemental documents have been added.'}</p><button onclick="window.opener.downloadDiscoveryWordForSet('${safeId}', true, '${safePhase}')">Download responses with Notes to attorney</button><button onclick="window.opener.downloadDiscoveryWordForSet('${safeId}', false, '${safePhase}')">Download responses without attorney notes</button><button onclick="window.opener.openDiscoveryUploadedDocsWindow('${safeId}', '${safePhase}')">Uploaded documents</button><button onclick="window.opener.convertDiscoveryDocumentsToPdfsZip('${safeId}', '${safePhase}')">Convert documents to PDFs</button><button onclick="window.opener.openDiscoveryLogWindow('${safeId}', '${safePhase}')">Discovery log</button></body></html>`);
+      win.document.close();
+    };
+    window.openDiscoveryResponsesForPhase = function(setId, phase){ fsdSetActive(setId, phase||'original'); openDiscoveryResponsesSmallWindow(setId, phase||'original'); };
+
+    window.deleteDiscoverySupplementPhase = async function(setId, phase){
+      const set=fsdSet(setId); if(!set){ alert('Select a discovery set first.'); return; }
+      const n=fsdPhaseNum(phase); if(!n){ alert('Only supplemental responses can be deleted here.'); return; }
+      const folder=fsdFolder(set, phase);
+      if(!confirm('Delete '+fsdPhaseLabel(phase)+' for '+folder+'? This removes the supplemental response/folder records and supplement tags. It does NOT delete the uploaded documents themselves.')) return;
+      const reqIds=new Set((discoveryRequestsForSet(set.id,true)||[]).map(r=>String(r.id)));
+      const deleteFiles=(discoveryState.files||[]).filter(f=>reqIds.has(String(f.request_id)) && fsdFileMatches(f, phase));
+      const fileIds=deleteFiles.map(f=>f.id).filter(Boolean);
+      try{ if(window.supabase && discoveryState.supabaseOk && fileIds.length) await supabase.from('discovery_files').delete().in('id', fileIds); }catch(e){ console.warn('Could not delete supplement discovery file records from Supabase', e); }
+      discoveryState.files=(discoveryState.files||[]).filter(f=>!(reqIds.has(String(f.request_id)) && fsdFileMatches(f, phase)));
+      try{
+        if(window.loadTags) await window.loadTags();
+        const tags=Array.isArray(window.loadedTags)?window.loadedTags:[];
+        const root=tags.find(t=>String(t.name||'').trim().toLowerCase()==='client discovery responses' && !String(t.parent_id||''));
+        const folderTag=tags.find(t=>String(t.name||'').trim().toLowerCase()===String(folder).trim().toLowerCase() && (!root || String(t.parent_id||'')===String(root.id||'')));
+        if(folderTag && window.deleteTagRow) await window.deleteTagRow(folderTag.id);
+      }catch(e){ console.warn('Could not delete supplement tags', e); }
+      const k=String(set.id);
+      if(discoveryState.supplementPhasesBySet && Array.isArray(discoveryState.supplementPhasesBySet[k])) discoveryState.supplementPhasesBySet[k]=discoveryState.supplementPhasesBySet[k].filter(p=>fsdPhaseNum(p)!==n);
+      if((discoveryState.activeDiscoveryPhaseBySet||{})[k]===phase) discoveryState.activeDiscoveryPhaseBySet[k]='original';
+      try{ saveDiscoveryLocal(); if(window.loadTags) await window.loadTags(); if(window.loadDocumentTags) await window.loadDocumentTags(); if(window.loadDocuments) await window.loadDocuments(); }catch(e){}
+      renderDiscovery(); alert(fsdPhaseLabel(phase)+' deleted.');
+    };
+
+    window.openDiscoveryResponseChooser = function(setId, purpose='respond'){
+      const set=fsdSet(setId); if(!set){ alert('Select a discovery set first.'); return; }
+      const reqIds=new Set((discoveryRequestsForSet(set.id,true)||[]).map(r=>String(r.id)));
+      const nums=new Set();
+      (discoveryState.files||[]).forEach(f=>{ if(reqIds.has(String(f.request_id))){ const n=fsdPhaseNum(fsdFilePhase(f)); if(n) nums.add(n); }});
+      const remembered=(discoveryState.supplementPhasesBySet||{})[String(set.id)]||[]; (Array.isArray(remembered)?remembered:[]).forEach(p=>{ const n=fsdPhaseNum(p); if(n) nums.add(n); });
+      const ordered=[...nums].sort((a,b)=>a-b);
+      let next=1; while(nums.has(next)) next++;
+      const safeId=String(set.id).replace(/'/g,"\\'");
+      const rowFor=(phase,label)=>{
+        const folder=fsdFolder(set,phase); const safePhase=String(phase).replace(/'/g,"\\'");
+        if(purpose==='responses') return `<button onclick="window.opener.openDiscoveryResponsesForPhase('${safeId}','${safePhase}'); window.close();">${escapeHtml(label)} - ${escapeHtml(folder)}</button>${phase!=='original'?`<button class="danger" onclick="window.opener.deleteDiscoverySupplementPhase('${safeId}','${safePhase}'); window.close();">Delete ${escapeHtml(label)}</button>`:''}`;
+        return `<button onclick="window.opener.selectDiscoveryPhaseAndMode && window.opener.selectDiscoveryPhaseAndMode('${safeId}','${safePhase}','${phase==='original'?'client':'supplemental'}'); window.opener.openDiscoveryPhaseWorksheet('${safeId}','${safePhase}'); window.close();">Open response page: ${escapeHtml(label)}</button><button class="secondary" onclick="window.opener.openDiscoveryPhaseWorksheet('${safeId}','${safePhase}'); window.close();">Open Document Worksheet: ${escapeHtml(folder)}</button>${phase!=='original'?`<button class="danger" onclick="window.opener.deleteDiscoverySupplementPhase('${safeId}','${safePhase}'); window.close();">Delete ${escapeHtml(label)}</button>`:''}`;
+      };
+      const rows=[rowFor('original','Original Response')].concat(ordered.map(n=>rowFor(fsdPhaseKey(n), fsdPhaseLabel(fsdPhaseKey(n))))).join('');
+      const win=window.open('', '_blank', 'width=560,height=720,scrollbars=yes,resizable=yes'); if(!win){ alert('Please allow popups to choose the discovery response.'); return; }
+      win.document.open();
+      win.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>Choose discovery response</title><style>body{font-family:Arial,sans-serif;margin:20px;color:#0f172a}button{display:block;width:100%;margin:8px 0;border:1px solid #e2e8f0;border-radius:12px;background:#2563eb;color:#fff;padding:10px 12px;font-weight:700;text-align:left;cursor:pointer}.secondary{background:#fff;color:#0f172a}.create{background:#16a34a;color:#fff}.danger{background:#fee2e2;color:#991b1b;border-color:#fecaca}.hint{color:#64748b;font-size:13px;line-height:1.35}hr{border:none;border-top:1px solid #e2e8f0;margin:12px 0}</style></head><body><h2>${purpose==='responses'?'Which response package?':'Which discovery response?'}</h2><p class="hint">${escapeHtml(set.title||'')}</p>${rows}<hr><button class="create" onclick="window.opener.createNextDiscoverySupplementAndOpen('${safeId}','${purpose}'); window.close();">Create ${escapeHtml(fsdPhaseLabel(fsdPhaseKey(next)))} / add another supplement</button></body></html>`);
+      win.document.close();
+    };
+
+    window.createNextDiscoverySupplementAndOpen = async function(setId, purpose='respond'){
+      const set=fsdSet(setId); if(!set) return;
+      const reqIds=new Set((discoveryRequestsForSet(set.id,true)||[]).map(r=>String(r.id)));
+      const nums=new Set();
+      (discoveryState.files||[]).forEach(f=>{ if(reqIds.has(String(f.request_id))){ const n=fsdPhaseNum(fsdFilePhase(f)); if(n) nums.add(n); }});
+      const remembered=(discoveryState.supplementPhasesBySet||{})[String(set.id)]||[]; (Array.isArray(remembered)?remembered:[]).forEach(p=>{ const n=fsdPhaseNum(p); if(n) nums.add(n); });
+      let next=1; while(nums.has(next)) next++;
+      const phase=fsdPhaseKey(next); fsdSetActive(set.id, phase);
+      try{ await ensureClientDiscoveryResponseTagsForSet({...set,__discoveryPhase:phase}, discoveryRequestsForSet(set.id,true)); }catch(e){}
+      if(purpose==='responses') openDiscoveryResponsesSmallWindow(set.id, phase); else window.openDiscoveryPhaseWorksheet(set.id, phase);
+    };
+
+    function fsdDecorateRapidDom(){
+      try{
+        const setId = (typeof getRapidDiscoverySetIdFromUrl==='function' && getRapidDiscoverySetIdFromUrl()) || discoveryState.selectedSetId || '';
+        const phase=fsdActive(setId); const n=fsdPhaseNum(phase);
+        const set=fsdSet(setId);
+        if(n && set){
+          const prefix=fsdOrd(n).toLowerCase()+'supp req ';
+          document.querySelectorAll('.rapidDiscoveryCellBtn').forEach(btn=>{ btn.textContent = btn.textContent.replace(/(Add to |Selected for )(?:Req\.\s*|\d+(?:st|nd|rd|th)supp req\s*)/i, '$1'+prefix); });
+          document.querySelectorAll('.rapidDiscoveryTable th').forEach(th=>{ th.textContent = th.textContent.replace(/^Req\.\s*/i, prefix); });
+        }
+        const targets=document.querySelectorAll('.rapidDiscoveryControls,.rapidDiscoveryTop');
+        targets.forEach(host=>{ if(!host.querySelector('[data-reset-gordon-supp]')){ const b=document.createElement('button'); b.type='button'; b.className='btnDanger mini'; b.setAttribute('data-reset-gordon-supp', setId); b.textContent='Reset 1st Supp RFP'; host.appendChild(b); } });
+      }catch(e){}
+    }
+    const prevRenderDiscovery=renderDiscovery;
+    renderDiscovery=function(){ const result=prevRenderDiscovery.apply(this, arguments); fsdDecorateRapidDom(); return result; };
+    window.renderDiscovery=renderDiscovery;
+    setInterval(fsdDecorateRapidDom, 750);
+  })();
+
   initializeCaseChatUi();
 
   setTimeout(async ()=>{
