@@ -13577,9 +13577,21 @@ const endpoint = `${SUPABASE_URL}/functions/v1/finalize-exhibit-packet`;
       discoveryState.activeDiscoveryPhaseBySet = discoveryState.activeDiscoveryPhaseBySet || {};
       return discoveryState.activeDiscoveryPhaseBySet[setId] || 'original';
     }
+    function rememberSupplementPhaseForSet(setId, phase){
+      const n = discoveryPhaseNumber(phase);
+      if(!setId || !n) return;
+      discoveryState.supplementPhasesBySet = discoveryState.supplementPhasesBySet || {};
+      const key = String(setId);
+      const list = Array.isArray(discoveryState.supplementPhasesBySet[key]) ? discoveryState.supplementPhasesBySet[key].slice() : [];
+      const phaseKey = discoveryPhaseKey(n);
+      if(!list.includes(phaseKey)) list.push(phaseKey);
+      discoveryState.supplementPhasesBySet[key] = list.sort((a,b)=>discoveryPhaseNumber(a)-discoveryPhaseNumber(b));
+    }
     function setActiveDiscoveryPhaseForSet(setId, phase){
       discoveryState.activeDiscoveryPhaseBySet = discoveryState.activeDiscoveryPhaseBySet || {};
-      discoveryState.activeDiscoveryPhaseBySet[setId] = phase || 'original';
+      const nextPhase = phase || 'original';
+      discoveryState.activeDiscoveryPhaseBySet[setId] = nextPhase;
+      if(discoveryPhaseNumber(nextPhase)) rememberSupplementPhaseForSet(setId, nextPhase);
       saveDiscoveryLocal();
     }
     function fileMatchesDiscoveryPhase(file, phase){
@@ -13604,18 +13616,26 @@ const endpoint = `${SUPABASE_URL}/functions/v1/finalize-exhibit-packet`;
         const n = Number(f.supplement_number || f.supplemental_number || 0) || discoveryPhaseNumber(phase) || (isSupplementalDiscoveryFile(f) ? 1 : 0);
         if(n) nums.add(n);
       });
-      Object.entries(discoveryState.activeDiscoveryPhaseBySet || {}).forEach(([id, phase]) => { if(String(id) === String(set.id)){ const n = discoveryPhaseNumber(phase); if(n) nums.add(n); } });
-      return Array.from(nums).sort((a,b)=>a-b).map(n => discoveryPhaseKey(n));
+      const remembered = (discoveryState.supplementPhasesBySet || {})[String(set.id)] || [];
+      (Array.isArray(remembered) ? remembered : []).forEach(phase => { const n = discoveryPhaseNumber(phase); if(n) nums.add(n); });
+
+      // Old versions accidentally counted the last-opened active phase as if it had been created.
+      // Do not do that here; otherwise the chooser can skip 1st Supplemental and jump to 2nd.
+      const ordered = Array.from(nums).filter(Boolean).sort((a,b)=>a-b);
+      return ordered.map(n => discoveryPhaseKey(n));
     }
     function nextSupplementPhaseForSet(set){
-      const nums = getSupplementPhasesForSet(set).map(discoveryPhaseNumber).filter(Boolean);
-      const next = nums.length ? Math.max(...nums) + 1 : 1;
-      return discoveryPhaseKey(next);
+      const nums = new Set(getSupplementPhasesForSet(set).map(discoveryPhaseNumber).filter(Boolean));
+      let n = 1;
+      while(nums.has(n)) n += 1;
+      return discoveryPhaseKey(n);
     }
     async function ensureSupplementPhaseFolder(set, phase){
       if(!set || !phase || phase === 'original') return;
+      rememberSupplementPhaseForSet(set.id, phase);
       setActiveDiscoveryPhaseForSet(set.id, phase);
       try{ await ensureClientDiscoveryResponseTagsForSet(set, discoveryRequestsForSet(set.id, true)); }catch(e){ console.warn('Could not pre-create supplement tags.', e); }
+      saveDiscoveryLocal();
     }
 
     const __oldDiscoveryFilesForRequest = discoveryFilesForRequest;
@@ -13821,9 +13841,12 @@ const endpoint = `${SUPABASE_URL}/functions/v1/finalize-exhibit-packet`;
     }
 
     function choosePhaseAndMode(setId, phase, mode){
-      setActiveDiscoveryPhaseForSet(setId, phase || 'original');
-      if(phase && phase !== 'original') ensureSupplementPhaseFolder(getDiscoverySetById(setId), phase);
-      selectDiscoverySet(setId, mode || 'client');
+      const finalPhase = phase || 'original';
+      setActiveDiscoveryPhaseForSet(setId, finalPhase);
+      if(finalPhase !== 'original') ensureSupplementPhaseFolder(getDiscoverySetById(setId), finalPhase);
+      selectDiscoverySet(setId, mode || (finalPhase !== 'original' ? 'supplemental' : 'client'));
+      try{ renderDiscovery(); }catch(e){}
+      try{ window.focus(); }catch(e){}
     }
     window.selectDiscoveryPhaseAndMode = choosePhaseAndMode;
     window.openDiscoveryPhaseWorksheet = function(setId, phase){ choosePhaseAndMode(setId, phase || 'original', (phase && phase !== 'original') ? 'supplemental' : 'client'); openRapidDiscoveryWorksheet(setId, phase || 'original'); };
@@ -13848,12 +13871,12 @@ const endpoint = `${SUPABASE_URL}/functions/v1/finalize-exhibit-packet`;
       const rows = phases.map(phase => {
         const label = discoveryResponsePhaseLabel(phase);
         const folder = discoveryPhaseFolderName(set, phase);
-        if(purpose === 'responses') return `<button onclick="window.opener.openDiscoveryResponsesForPhase('${safeId}','${phase}')">${escapeHtml(label)} - ${escapeHtml(folder)}</button>`;
-        return `<button onclick="window.opener.selectDiscoveryPhaseAndMode('${safeId}','${phase}','${phase === 'original' ? 'client' : 'supplemental'}')">Open response page: ${escapeHtml(label)}</button><button class="secondary" onclick="window.opener.openDiscoveryPhaseWorksheet('${safeId}','${phase}')">Open Document Worksheet: ${escapeHtml(folder)}</button>`;
+        if(purpose === 'responses') return `<button onclick="window.opener.openDiscoveryResponsesForPhase('${safeId}','${phase}'); window.close();">${escapeHtml(label)} - ${escapeHtml(folder)}</button>`;
+        return `<button onclick="window.opener.selectDiscoveryPhaseAndMode('${safeId}','${phase}','${phase === 'original' ? 'client' : 'supplemental'}'); window.opener.focus(); window.close();">Open response page: ${escapeHtml(label)}</button><button class="secondary" onclick="window.opener.openDiscoveryPhaseWorksheet('${safeId}','${phase}'); window.close();">Open Document Worksheet: ${escapeHtml(folder)}</button>`;
       }).join('');
       const nextLabel = discoveryResponsePhaseLabel(next);
       win.document.open();
-      win.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>Choose discovery response</title><style>body{font-family:Arial,sans-serif;margin:20px;color:#0f172a}button{display:block;width:100%;margin:8px 0;border:1px solid #e2e8f0;border-radius:12px;background:#2563eb;color:#fff;padding:10px 12px;font-weight:700;text-align:left;cursor:pointer}.secondary{background:#fff;color:#0f172a}.hint{color:#64748b;font-size:13px;line-height:1.35}.create{background:#16a34a;color:white}</style></head><body><h2>${purpose === 'responses' ? 'Which response package?' : 'Which discovery response?'}</h2><p class="hint">${escapeHtml(set.title || '')}</p>${rows}<hr><button class="create" onclick="window.opener.createNextDiscoverySupplementAndOpen('${safeId}','${purpose}')">Create ${escapeHtml(nextLabel)} / add another supplement</button></body></html>`);
+      win.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>Choose discovery response</title><style>body{font-family:Arial,sans-serif;margin:20px;color:#0f172a}button{display:block;width:100%;margin:8px 0;border:1px solid #e2e8f0;border-radius:12px;background:#2563eb;color:#fff;padding:10px 12px;font-weight:700;text-align:left;cursor:pointer}.secondary{background:#fff;color:#0f172a}.hint{color:#64748b;font-size:13px;line-height:1.35}.create{background:#16a34a;color:white}</style></head><body><h2>${purpose === 'responses' ? 'Which response package?' : 'Which discovery response?'}</h2><p class="hint">${escapeHtml(set.title || '')}</p>${rows}<hr><button class="create" onclick="window.opener.createNextDiscoverySupplementAndOpen('${safeId}','${purpose}'); window.close();">Create ${escapeHtml(nextLabel)} / add another supplement</button></body></html>`);
       win.document.close();
     }
     window.openDiscoveryResponseChooser = openDiscoveryResponseChooser;
