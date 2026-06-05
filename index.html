@@ -12797,7 +12797,7 @@ const endpoint = `${SUPABASE_URL}/functions/v1/finalize-exhibit-packet`;
       const noAnswerNotice = !required ? '<div class="setupBox">Your attorney has marked this request as not requiring a client response. Review the request and attorney comments, but you do not need to answer it unless your attorney asks you to.</div>' : '';
       const needsHelp = getDiscoveryNeedHelp(req.id);
       const rfpNeedsPrior = resp.rfp_status === 'The requested items were attached to a prior response';
-      return `<div class="discoveryRequestRow ${!required ? 'discoveryNoAnswerNeeded' : ''} ${needsHelp ? 'discoveryNeedsHelp' : ''}"><div class="discoveryRequestTop"><div class="discoveryReqNumber">${escapeHtml(getDiscoveryLabel(req.request_type))} ${escapeHtml(req.request_number || '')}</div><span class="hint">${required ? 'Response required' : 'No response required'} • ${currentSupplementalMode ? 'Supplemental files' : 'Original files'}: ${files.length}</span></div><div class="discoveryReqText">${escapeHtml(req.request_text || '')}</div><div class="discoveryInstructionsBox discoveryAttorneyCommentBox"><div class="label">Attorney's Comments:</div><div class="discoveryReqText">${attyNotes ? escapeHtml(attyNotes) : 'None'}</div></div>${noAnswerNotice}${isRfp ? `<div><div class="label">Response</div><select data-discovery-rfp-status="${escapeHtml(req.id)}" ${!required ? 'disabled' : ''}><option value="">Choose response...</option>${DISCOVERY_RFP_OPTIONS.map(opt => `<option value="${escapeHtml(opt)}" ${resp.rfp_status === opt ? 'selected' : ''}>${escapeHtml(opt)}</option>`).join('')}</select></div>${rfpNeedsPrior ? `<div><div class="label">Which prior response were the requested items attached to?</div><textarea data-discovery-rfp-upload-notes="${escapeHtml(req.id)}" placeholder="Example: Attached to prior RFP response served on 05/01/2026, Request No. 4.">${escapeHtml(resp.rfp_upload_notes || '')}</textarea></div>` : ''}` : `<div><div class="label">Your answer</div><textarea data-discovery-client-response="${escapeHtml(req.id)}" placeholder="Type your answer here" ${!required ? 'disabled' : ''}>${escapeHtml(resp.client_response || '')}</textarea></div>`}<div><div class="label">Questions / comments to your attorney</div><textarea data-discovery-client-comments="${escapeHtml(req.id)}" placeholder="Ask your attorney a question or explain anything you are unsure about">${escapeHtml(resp.client_comments || '')}</textarea></div><div class="row"><button type="button" class="${needsHelp ? 'btnDanger' : 'btnGhost'}" data-discovery-need-help="${escapeHtml(req.id)}">Need Help</button></div><div><div class="label">${currentSupplementalMode ? 'Upload supplemental files for this request' : 'Upload files for this request'}</div><button type="button" class="btnPrimary discoveryUploadButton" data-discovery-open-upload="${escapeHtml(req.id)}">Upload document</button> <button type="button" class="btnGhost discoveryUploadButton" data-discovery-open-bulk-upload="${escapeHtml(req.id)}">Upload Multiple Documents</button></div><div class="discoveryFileList">${files.length ? files.map(f => `<div class="discoveryFilePill"><span>${escapeHtml(discoveryNameForClientFile(f, req))}</span>${f.file_path ? `<a target="_blank" rel="noopener" href="${escapeHtml(getDocumentPublicUrl(f.file_path))}">Open</a>` : '<span class="hint">local only</span>'}</div>`).join('') : `<div class="hint">${currentSupplementalMode ? 'No supplemental files uploaded for this request yet.' : 'No original files uploaded for this request yet.'}</div>`}</div></div>`;
+      return `<div class="discoveryRequestRow ${!required ? 'discoveryNoAnswerNeeded' : ''} ${needsHelp ? 'discoveryNeedsHelp' : ''}"><div class="discoveryRequestTop"><div class="discoveryReqNumber">${escapeHtml(getDiscoveryLabel(req.request_type))} ${escapeHtml(req.request_number || '')}</div><span class="hint">${required ? 'Response required' : 'No response required'} • ${currentSupplementalMode ? 'Supplemental files' : 'Original files'}: ${files.length}</span></div><div class="discoveryReqText">${escapeHtml(req.request_text || '')}</div><div class="discoveryInstructionsBox discoveryAttorneyCommentBox"><div class="label">Attorney's Comments:</div><div class="discoveryReqText">${attyNotes ? escapeHtml(attyNotes) : 'None'}</div></div>${noAnswerNotice}${isRfp ? `<div><div class="label">Response</div><select data-discovery-rfp-status="${escapeHtml(req.id)}" ${!required ? 'disabled' : ''}><option value="">Choose response...</option>${DISCOVERY_RFP_OPTIONS.map(opt => `<option value="${escapeHtml(opt)}" ${resp.rfp_status === opt ? 'selected' : ''}>${escapeHtml(opt)}</option>`).join('')}</select></div>${rfpNeedsPrior ? `<div><div class="label">Which prior response were the requested items attached to?</div><textarea data-discovery-rfp-upload-notes="${escapeHtml(req.id)}" placeholder="Example: Attached to prior RFP response served on 05/01/2026, Request No. 4.">${escapeHtml(resp.rfp_upload_notes || '')}</textarea></div>` : ''}` : `<div><div class="label">Your answer</div><textarea data-discovery-client-response="${escapeHtml(req.id)}" placeholder="Type your answer here" ${!required ? 'disabled' : ''}>${escapeHtml(resp.client_response || '')}</textarea></div>`}<div><div class="label">Questions / comments to your attorney</div><textarea data-discovery-client-comments="${escapeHtml(req.id)}" placeholder="Ask your attorney a question or explain anything you are unsure about">${escapeHtml(resp.client_comments || '')}</textarea></div><div class="row"><button type="button" class="${needsHelp ? 'btnDanger' : 'btnGhost'}" data-discovery-need-help="${escapeHtml(req.id)}">Need Help</button></div><div><div class="label">${currentSupplementalMode ? 'Upload supplemental files for this request' : 'Upload files for this request'}</div><button type="button" class="btnPrimary discoveryUploadButton" data-discovery-open-upload="${escapeHtml(req.id)}">Upload document</button> <button type="button" class="btnGhost discoveryUploadButton" data-discovery-open-bulk-upload="${escapeHtml(req.id)}">Upload Multiple Documents</button></div><div class="discoveryFileList">${files.length ? files.map(f => `<div class="discoveryFilePill"><span>${escapeHtml(discoveryNameForClientFile(f, req))}</span><span style="display:inline-flex;gap:8px;align-items:center;flex-wrap:wrap">${f.file_path ? `<a target="_blank" rel="noopener" href="${escapeHtml(getDocumentPublicUrl(f.file_path))}">Open</a>` : '<span class="hint">local only</span>'}<button type="button" class="btnDanger mini" data-discovery-remove-file="${escapeHtml(f.id || '')}">Remove</button></span></div>`).join('') : `<div class="hint">${currentSupplementalMode ? 'No supplemental files uploaded for this request yet.' : 'No original files uploaded for this request yet.'}</div>`}</div></div>`;
     }).join('') : '<div class="empty">There are no requests in this discovery set.</div>');
     host.querySelectorAll('[data-discovery-client-response]').forEach(el => el.addEventListener('blur', () => updateDiscoveryResponse(el.getAttribute('data-discovery-client-response'), { client_response:el.value || '' })));
     host.querySelectorAll('[data-discovery-client-comments]').forEach(el => el.addEventListener('blur', () => updateDiscoveryResponse(el.getAttribute('data-discovery-client-comments'), { client_comments:el.value || '' })));
@@ -12820,6 +12820,7 @@ const endpoint = `${SUPABASE_URL}/functions/v1/finalize-exhibit-packet`;
     host.querySelectorAll('[data-rapid-commit]').forEach(btn => btn.addEventListener('click', () => commitRapidDiscoveryAssignments(btn.getAttribute('data-rapid-commit'))));
     host.querySelectorAll('[data-rapid-assign-doc]').forEach(btn => btn.addEventListener('click', () => toggleRapidDiscoveryAssignment(btn.getAttribute('data-rapid-assign-set'), btn.getAttribute('data-rapid-assign-doc'), btn.getAttribute('data-rapid-assign-req'))));
     host.querySelectorAll('[data-discovery-need-help]').forEach(btn => btn.addEventListener('click', () => setDiscoveryNeedHelp(btn.getAttribute('data-discovery-need-help'), !getDiscoveryNeedHelp(btn.getAttribute('data-discovery-need-help')))));
+    host.querySelectorAll('[data-discovery-remove-file]').forEach(btn => btn.addEventListener('click', () => removeDiscoveryFileFromRequest(btn.getAttribute('data-discovery-remove-file'))));
   }
 
   function renderDiscoveryCompletion(){
@@ -15443,6 +15444,93 @@ const endpoint = `${SUPABASE_URL}/functions/v1/finalize-exhibit-packet`;
       }
     };
     window.commitRapidDiscoveryAssignments = commitRapidDiscoveryAssignments;
+
+    function fsdRemoveTagLinkIdsFromDoc(docId, removeIds){
+      const ids = new Set(Array.from(removeIds || []).map(String).filter(Boolean));
+      if(!ids.size || !docId) return Promise.resolve();
+      const docs = Array.isArray(state?.documents) ? state.documents : (Array.isArray(window.loadedDocuments) ? window.loadedDocuments : []);
+      const doc = docs.find(d => String(d.id) === String(docId)) || (Array.isArray(window.loadedDocuments) ? window.loadedDocuments.find(d => String(d.id) === String(docId)) : null);
+      if(!doc || !window.updateDocumentRow) return Promise.resolve();
+      const links = Array.isArray(doc.tagLinks) ? doc.tagLinks.slice() : (Array.isArray(doc.tag_links) ? doc.tag_links.slice() : []);
+      const nextLinks = links.filter(link => !ids.has(String(link.tagId || link.tag_id || '')) && !ids.has(String(link.subtagId || link.subtag_id || '')));
+      if(JSON.stringify(nextLinks) === JSON.stringify(links)) return Promise.resolve();
+      doc.tagLinks = nextLinks;
+      doc.tag_links = nextLinks;
+      return window.updateDocumentRow(docId, { tag_links: nextLinks }).catch(e => console.warn('Could not update document tag links after removing discovery file.', e));
+    }
+
+    async function fsdRemoveDiscoveryTagsForFile(file, req, set, phase){
+      if(!file?.document_id || !req || !set) return;
+      const allFiles = discoveryState.files || [];
+      const reqIdsForSet = new Set((discoveryRequestsForSet(set.id, true) || []).map(r => String(r.id)));
+      const remainingForDocSamePhase = allFiles.some(f => String(f.id) !== String(file.id) && String(f.document_id || '') === String(file.document_id || '') && reqIdsForSet.has(String(f.request_id || '')) && fsdFileMatches(f, phase));
+      let tags = null;
+      try{ tags = await ensureClientDiscoveryResponseTagsForSet({ ...(set || {}), __discoveryPhase: phase }, [req]); }catch(e){ console.warn('Could not resolve discovery tags for removal.', e); }
+      const idsToRemove = new Set();
+      const reqTagId = tags?.reqTags?.[req.id]?.id;
+      if(reqTagId) idsToRemove.add(reqTagId);
+      if(!remainingForDocSamePhase && tags?.setTag?.id) idsToRemove.add(tags.setTag.id);
+      if(!idsToRemove.size) return;
+      try{
+        if(window.supabase){
+          await supabase.from('document_tags').delete().eq('case_id', getCaseId()).eq('document_id', file.document_id).in('tag_id', Array.from(idsToRemove));
+        }
+      }catch(e){ console.warn('Could not remove discovery document_tags in Supabase.', e); }
+      await fsdRemoveTagLinkIdsFromDoc(file.document_id, idsToRemove);
+    }
+
+    async function removeDiscoveryFileFromRequest(fileId, options={}){
+      const id = String(fileId || '');
+      if(!id){ alert('Could not identify that file record.'); return false; }
+      const file = (discoveryState.files || []).find(f => String(f.id) === id);
+      if(!file){ alert('That file record was not found. Refresh the page and try again.'); return false; }
+      const req = (discoveryState.requests || []).find(r => String(r.id) === String(file.request_id));
+      const set = req ? fsdSet(req.discovery_set_id) : null;
+      const phase = fsdFilePhase(file) || fsdActive(set?.id || '') || 'original';
+      const label = cleanDiscoveryStoredFileName(discoveryDocumentDisplayName(file) || file.file_name || 'this file');
+      if(options.confirm !== false && !confirm('Remove "' + label + '" from this discovery request/folder? This will not delete the document itself.')) return false;
+      try{
+        if(window.supabase && discoveryState.supabaseOk){ await supabase.from('discovery_files').delete().eq('id', file.id); }
+      }catch(e){ console.warn('Could not delete discovery_files row from Supabase; removing locally anyway.', e); }
+      try{ await fsdRemoveDiscoveryTagsForFile(file, req, set, phase); }catch(e){ console.warn('Could not remove discovery tags from document.', e); }
+      discoveryState.files = (discoveryState.files || []).filter(f => String(f.id) !== id);
+      saveDiscoveryLocal();
+      try{ if(window.loadDocumentTags) await window.loadDocumentTags(); }catch(e){}
+      try{ if(window.loadDocuments) await window.loadDocuments(); }catch(e){}
+      try{ renderDiscovery(); }catch(e){}
+      return true;
+    }
+    window.removeDiscoveryFileFromRequest = removeDiscoveryFileFromRequest;
+
+    openDiscoveryUploadedDocsWindow = function(setId, phaseArg='original'){
+      const set = fsdSet(setId) || getDiscoverySetById(setId);
+      if(!set){ alert('Select a discovery set first.'); return; }
+      const phase = phaseArg || fsdActive(set.id) || 'original';
+      fsdSetActive(set.id, phase);
+      const rows = fsdRowsForPhase(set, phase);
+      const reqIdsWithFiles = new Set(rows.map(row => String(row.req?.id || '')));
+      const reqs = discoveryRequestsForSet(set.id, true).filter(req => phase === 'original' || reqIdsWithFiles.has(String(req.id)));
+      const title = phase === 'original' ? 'Uploaded documents' : `${fsdPhaseLabel(phase)} uploaded documents`;
+      const folder = phase === 'original' ? (set.title || '') : fsdFolder(set, phase);
+      const win = window.open('', '_blank', 'width=1100,height=800,scrollbars=yes,resizable=yes');
+      if(!win){ alert('Please allow popups to view uploaded documents.'); return; }
+      const safeId = String(set.id).replace(/'/g,"\\'");
+      const safePhase = String(phase).replace(/'/g,"\\'");
+      const sections = reqs.map(req => {
+        const rr = rows.filter(row => String(row.req?.id || '') === String(req.id || ''));
+        const list = rr.length ? `<ul>${rr.map(row => {
+          const fileId = String(row.file?.id || '').replace(/'/g,"\\'");
+          const link = row.url ? `<a target="_blank" href="${escapeHtml(row.url)}">${escapeHtml(row.defaultName)}</a>` : `<span>${escapeHtml(row.defaultName)}</span>`;
+          return `<li data-file-row="${escapeHtml(fileId)}" style="margin:6px 0">${link} <button class="removeBtn" onclick="(async()=>{ if(await window.opener.removeDiscoveryFileFromRequest('${fileId}', {confirm:true})){ const el=document.querySelector('[data-file-row=\\'${fileId}\\']'); if(el) el.remove(); } })()">Remove</button></li>`;
+        }).join('')}</ul>` : `<p style="color:#64748b">No documents uploaded for this request.</p>`;
+        return `<section style="border:1px solid #e2e8f0;border-radius:14px;padding:14px;margin:12px 0;background:#fff"><h2 style="margin:0 0 8px 0">Request ${escapeHtml(req.request_number || '')}</h2><div style="white-space:pre-wrap;margin-bottom:10px">${escapeHtml(req.request_text || '')}</div>${list}</section>`;
+      }).join('') || '<p style="color:#64748b">No requests in this package have associated documents.</p>';
+      win.document.open();
+      win.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>${escapeHtml(title)}</title><style>body{font-family:Arial,sans-serif;margin:24px;color:#0f172a}button{border:1px solid #e2e8f0;border-radius:999px;background:#2563eb;color:white;padding:10px 14px;font-weight:700;cursor:pointer}.removeBtn{background:#fee2e2;color:#991b1b;border-color:#fecaca;padding:4px 9px;margin-left:8px}.hint{color:#64748b}</style></head><body><h1>${escapeHtml(title)}</h1><p class="hint">${escapeHtml(folder)}</p><button onclick="window.opener.openDiscoveryDocumentDownloadWindow('${safeId}','${safePhase}')">Download documents</button>${sections}</body></html>`);
+      win.document.close();
+    };
+    window.openDiscoveryUploadedDocsWindow = openDiscoveryUploadedDocsWindow;
+
 
   })();
 
