@@ -14121,6 +14121,440 @@ const endpoint = `${SUPABASE_URL}/functions/v1/finalize-exhibit-packet`;
   })();
 
 
+
+  /* Supplemental discovery final repair: explicit phase tags, visible request tags, and phase-specific response windows/logs. */
+  (function installDiscoverySupplementFinalRepair(){
+    if(window.__discoverySupplementFinalRepairInstalled) return;
+    window.__discoverySupplementFinalRepairInstalled = true;
+
+    function dsfrOrdinal(n){
+      n = Number(n || 1); const v = n % 100;
+      if(v >= 11 && v <= 13) return n + 'th';
+      const last = n % 10;
+      return n + (last === 1 ? 'st' : last === 2 ? 'nd' : last === 3 ? 'rd' : 'th');
+    }
+    function dsfrPhaseNumber(phase){
+      const m = String(phase || '').match(/supp(?:lement)?\s*([0-9]+)/i) || String(phase || '').match(/^([0-9]+)$/);
+      return m ? Math.max(1, Number(m[1] || 1)) : 0;
+    }
+    function dsfrPhaseKey(n){ return Number(n || 0) > 0 ? `supp${Number(n)}` : 'original'; }
+    function dsfrGetAbbr(set){
+      try { return String(getDiscoveryAbbr(set?.discovery_type || '') || '').replace(/[^a-zA-Z0-9]/g,'').toLowerCase() || 'rfp'; }
+      catch(e){ return 'rfp'; }
+    }
+    function dsfrCompactDate(set){
+      const raw = String(set?.date_received || set?.date || '').slice(0,10);
+      const m = raw.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+      if(m) return `${Number(m[2])}.${Number(m[3])}.${String(m[1]).slice(2)}`;
+      const m2 = String(set?.title || '').match(/(\d{1,2})[.\/-](\d{1,2})[.\/-](\d{2,4})/);
+      if(m2) return `${Number(m2[1])}.${Number(m2[2])}.${String(m2[3]).slice(-2)}`;
+      return 'Discovery';
+    }
+    function dsfrFolderName(set, phase){
+      const n = dsfrPhaseNumber(phase);
+      if(!n){
+        try { return discoverySetTagName(set); } catch(e){ return set?.title || 'Discovery'; }
+      }
+      return `${dsfrOrdinal(n)}Supp${dsfrCompactDate(set)}${dsfrGetAbbr(set)}`;
+    }
+    function dsfrPhaseLabel(phase){ const n = dsfrPhaseNumber(phase); return n ? `${dsfrOrdinal(n)} Supplemental` : 'Original Response'; }
+    function dsfrActivePhase(setId){
+      try{
+        const params = new URLSearchParams(window.location.search || '');
+        const urlSet = params.get('rapidSet') || '';
+        const urlPhase = params.get('rapidPhase') || '';
+        if(urlPhase && (!urlSet || String(urlSet) === String(setId))) return urlPhase;
+      }catch(e){}
+      discoveryState.activeDiscoveryPhaseBySet = discoveryState.activeDiscoveryPhaseBySet || {};
+      return discoveryState.activeDiscoveryPhaseBySet[String(setId || '')] || 'original';
+    }
+    function dsfrSetActivePhase(setId, phase){
+      const p = phase || 'original';
+      discoveryState.activeDiscoveryPhaseBySet = discoveryState.activeDiscoveryPhaseBySet || {};
+      discoveryState.activeDiscoveryPhaseBySet[String(setId || '')] = p;
+      const n = dsfrPhaseNumber(p);
+      if(n){
+        discoveryState.supplementPhasesBySet = discoveryState.supplementPhasesBySet || {};
+        const key = String(setId || '');
+        const list = Array.isArray(discoveryState.supplementPhasesBySet[key]) ? discoveryState.supplementPhasesBySet[key].slice() : [];
+        const phaseKey = dsfrPhaseKey(n);
+        if(!list.includes(phaseKey)) list.push(phaseKey);
+        discoveryState.supplementPhasesBySet[key] = list.sort((a,b)=>dsfrPhaseNumber(a)-dsfrPhaseNumber(b));
+      }
+      try{ saveDiscoveryLocal(); }catch(e){}
+    }
+    function dsfrPhaseFromArg(setId, phaseArg){
+      if(typeof phaseArg === 'string' && phaseArg) return phaseArg;
+      if(phaseArg === true) return dsfrActivePhase(setId);
+      if(phaseArg === false) return 'original';
+      return dsfrActivePhase(setId) || 'original';
+    }
+    function dsfrFileMatchesPhase(file, phase){
+      phase = phase || 'original';
+      const n = dsfrPhaseNumber(phase);
+      const rawPhase = String(file?.discovery_phase || file?.response_phase || file?.phase || '').toLowerCase();
+      const rawKind = String(file?.response_kind || file?.responseKind || file?.upload_phase || '').toLowerCase();
+      const rawNum = Number(file?.supplement_number || file?.supplemental_number || file?.supplementNo || 0) || dsfrPhaseNumber(rawPhase);
+      const suppFlag = (typeof isSupplementalDiscoveryFile === 'function' && isSupplementalDiscoveryFile(file)) || rawKind === 'supplemental' || rawNum > 0;
+      if(n > 0){
+        if(rawNum) return rawNum === n;
+        if(rawPhase && rawPhase !== 'original') return rawPhase === phase || dsfrPhaseNumber(rawPhase) === n;
+        return n === 1 && suppFlag;
+      }
+      if(rawNum) return false;
+      if(rawPhase && rawPhase !== 'original') return false;
+      if(rawKind && rawKind !== 'original') return false;
+      return !suppFlag;
+    }
+    fileMatchesDiscoveryPhase = dsfrFileMatchesPhase;
+
+    function dsfrRequestTagName(set, phase, req){
+      const n = dsfrPhaseNumber(phase);
+      const num = String(req?.request_number || '').trim() || 'x';
+      if(!n) return (typeof discoveryRequestTagName === 'function' ? discoveryRequestTagName(req) : `Req. ${num}`);
+      // Self-identifying request-level tag. This prevents confusing generic "Req. 71" tags under a supplemental branch.
+      return `${dsfrFolderName(set, phase)} Req. ${num}`;
+    }
+    async function dsfrEnsureTagsForPhase(set, reqs, phase){
+      const root = await ensureDiscoveryTag('Client Discovery Responses', null);
+      if(!root) return {};
+      const setTag = await ensureDiscoveryTag(dsfrFolderName(set, phase), root.id);
+      const reqTags = {};
+      if(setTag){
+        for(const req of (reqs || [])){
+          const reqTag = await ensureDiscoveryTag(dsfrRequestTagName(set, phase, req), setTag.id);
+          if(reqTag) reqTags[req.id] = reqTag;
+        }
+      }
+      return { root, setTag, reqTags };
+    }
+
+    ensureClientDiscoveryResponseTagsForSet = async function(set, reqs=[]){
+      const forced = set?.__discoveryPhase || set?.__discovery_phase || '';
+      const phase = forced || dsfrActivePhase(set?.id || discoveryState.selectedSetId || '') || 'original';
+      return dsfrEnsureTagsForPhase(set, reqs, phase);
+    };
+
+    function dsfrDocumentCurrentLinks(docId){
+      const docs = Array.isArray(state?.documents) ? state.documents : [];
+      const doc = docs.find(d => String(d.id) === String(docId)) || (Array.isArray(window.loadedDocuments) ? window.loadedDocuments.find(d => String(d.id) === String(docId)) : null);
+      return Array.isArray(doc?.tagLinks) ? doc.tagLinks.slice() : (Array.isArray(doc?.tag_links) ? doc.tag_links.slice() : []);
+    }
+    function dsfrMergeLinks(existing, additions){
+      const out = []; const seen = new Set();
+      (Array.isArray(existing) ? existing : []).concat(Array.isArray(additions) ? additions : []).forEach(link => {
+        const tagId = String(link?.tagId || link?.tag_id || '');
+        const subtagId = String(link?.subtagId || link?.subtag_id || '');
+        if(!tagId) return;
+        const key = `${tagId}::${subtagId}`;
+        if(seen.has(key)) return;
+        seen.add(key); out.push({ tagId, subtagId });
+      });
+      return out;
+    }
+    applyDiscoveryTagsToDocument = async function(docId, set, req){
+      const phase = set?.__discoveryPhase || set?.__discovery_phase || dsfrActivePhase(set?.id || req?.discovery_set_id || discoveryState.selectedSetId || '') || 'original';
+      const tags = await dsfrEnsureTagsForPhase(set, [req], phase);
+      const requestTag = tags.reqTags?.[req.id] || null;
+      const ids = [tags.root?.id, tags.setTag?.id, requestTag?.id].filter(Boolean);
+      for(const tagId of ids){
+        try{ if(window.assignDocumentTag) await window.assignDocumentTag(docId, tagId); }catch(e){ console.warn('Could not assign discovery tag', tagId, e); }
+      }
+      try{
+        if(window.updateDocumentRow && tags.root?.id && tags.setTag?.id){
+          const additions = [{ tagId: tags.root.id, subtagId: tags.setTag.id }];
+          if(requestTag?.id){
+            additions.push({ tagId: tags.setTag.id, subtagId: requestTag.id });
+            additions.push({ tagId: tags.root.id, subtagId: requestTag.id });
+          }
+          const links = dsfrMergeLinks(dsfrDocumentCurrentLinks(docId), additions);
+          const updated = await window.updateDocumentRow(docId, { tag_links: links });
+          if(updated && Array.isArray(state?.documents)){
+            const localDoc = state.documents.find(d => String(d.id) === String(docId));
+            if(localDoc) localDoc.tagLinks = links;
+          }
+        }
+      }catch(e){ console.warn('Could not save discovery tag links on document', e); }
+    };
+
+    discoveryFilesForRequest = function(requestId, phaseArg=null){
+      const req = (discoveryState.requests || []).find(r => String(r.id) === String(requestId));
+      let phase = null;
+      if(typeof phaseArg === 'string') phase = phaseArg;
+      else if(phaseArg === true) phase = dsfrActivePhase(req?.discovery_set_id || discoveryState.selectedSetId || '');
+      else if(phaseArg === false) phase = 'original';
+      if(!phase){ return (discoveryState.files || []).filter(f => String(f.request_id) === String(requestId)); }
+      return (discoveryState.files || []).filter(f => String(f.request_id) === String(requestId) && dsfrFileMatchesPhase(f, phase));
+    };
+
+    rapidDiscoveryAssignedDocumentIdsForSet = function(setId){
+      const phase = dsfrActivePhase(setId);
+      const reqIds = new Set(discoveryRequestsForSet(setId, true).map(r => String(r.id)));
+      return new Set((discoveryState.files || []).filter(f => reqIds.has(String(f.request_id)) && f.document_id && dsfrFileMatchesPhase(f, phase)).map(f => String(f.document_id)));
+    };
+    function dsfrRapidStoreKey(setId){ return `${setId}::${dsfrActivePhase(setId)}`; }
+    rapidDiscoveryPendingAssignments = function(setId){
+      const raw = ((discoveryState.rapidPendingAssignmentsBySet || {})[dsfrRapidStoreKey(setId)]) || [];
+      return Array.isArray(raw) ? raw.filter(item => item && item.docId && item.requestId) : [];
+    };
+    setRapidDiscoveryAssignmentPending = function(setId, docId, requestId, pending){
+      discoveryState.rapidPendingAssignmentsBySet = discoveryState.rapidPendingAssignmentsBySet || {};
+      const keyName = dsfrRapidStoreKey(setId);
+      const list = rapidDiscoveryPendingAssignments(setId);
+      const key = rapidDiscoveryPendingKey(docId, requestId);
+      const next = list.filter(item => rapidDiscoveryPendingKey(item.docId, item.requestId) !== key);
+      if(pending) next.push({ docId:String(docId || ''), requestId:String(requestId || '') });
+      discoveryState.rapidPendingAssignmentsBySet[keyName] = next;
+      saveDiscoveryLocal();
+    };
+    commitRapidDiscoveryAssignments = async function(setId){
+      const phase = dsfrActivePhase(setId);
+      const pending = rapidDiscoveryPendingAssignments(setId);
+      if(!pending.length){ alert('Select or drop at least one document/request first.'); return; }
+      saveRapidDiscoveryScrollPosition(setId);
+      const seen = new Set();
+      const unique = pending.filter(item => { const key = rapidDiscoveryPendingKey(item.docId, item.requestId); if(seen.has(key)) return false; seen.add(key); return true; });
+      for(const item of unique){ await attachExistingMatterDocumentToDiscoveryRequest(item.requestId, item.docId, { deferRender:true, phase }); }
+      discoveryState.rapidPendingAssignmentsBySet = discoveryState.rapidPendingAssignmentsBySet || {};
+      discoveryState.rapidPendingAssignmentsBySet[dsfrRapidStoreKey(setId)] = [];
+      saveDiscoveryLocal();
+      renderRapidDiscoveryPreservingScroll(setId);
+    };
+
+    attachExistingMatterDocumentToDiscoveryRequest = async function(requestId, docId, options = {}){
+      const doc = getRapidDiscoveryMatterDocuments().find(d => String(d.id) === String(docId));
+      const req = (discoveryState.requests || []).find(r => String(r.id) === String(requestId));
+      if(!doc || !req){ alert('Could not find that document or request.'); return; }
+      const realSet = getDiscoverySetById(req.discovery_set_id);
+      const rapidSetId = realSet ? realSet.id : '';
+      const phase = options.phase || dsfrActivePhase(rapidSetId);
+      dsfrSetActivePhase(rapidSetId, phase);
+      const suppNo = dsfrPhaseNumber(phase);
+      saveRapidDiscoveryScrollPosition(rapidSetId);
+      const duplicate = (discoveryState.files || []).some(f => String(f.request_id) === String(requestId) && String(f.document_id || '') === String(doc.id) && dsfrFileMatchesPhase(f, phase));
+      const setForTags = realSet ? { ...realSet, __discoveryPhase: phase } : realSet;
+      if(duplicate){
+        if(setForTags && req) await applyDiscoveryTagsToDocument(doc.id, setForTags, req);
+        if(window.loadTags) { try{ await window.loadTags(); }catch(e){} }
+        if(window.loadDocumentTags) { try{ await window.loadDocumentTags(); }catch(e){} }
+        if(window.loadDocuments) { try{ await window.loadDocuments(); }catch(e){} }
+        if(!options.deferRender) renderRapidDiscoveryPreservingScroll(rapidSetId);
+        return;
+      }
+      const visibleName = doc.name || getAnyDocumentOriginalFileName(doc) || 'Document';
+      const local = {
+        id: discoveryUid(), case_id: getCaseId(), request_id: requestId, response_id: null, document_id: doc.id,
+        file_name: suppNo ? markSupplementalDiscoveryFileName(visibleName) : visibleName,
+        file_type: doc.mime_type || doc.mimeType || '', file_size: Number(doc.file_size || doc.fileSize || 0) || 0,
+        file_path: getAnyDocumentFilePath(doc), created_at: new Date().toISOString(),
+        response_kind: suppNo ? 'supplemental' : 'original', is_supplemental: !!suppNo,
+        discovery_phase: phase || 'original', supplement_number: suppNo || null
+      };
+      try{
+        if(setForTags && req) await applyDiscoveryTagsToDocument(doc.id, setForTags, req);
+        await discoveryInsertFileRecord(local);
+        saveDiscoveryLocal();
+        if(window.loadTags) { try{ await window.loadTags(); }catch(e){} }
+        if(window.loadDocumentTags) { try{ await window.loadDocumentTags(); }catch(e){} }
+        if(window.loadDocuments) { try{ await window.loadDocuments(); }catch(e){} }
+        if(!options.deferRender) renderRapidDiscoveryPreservingScroll(rapidSetId);
+      }catch(error){
+        console.warn('Could not attach existing matter document to discovery request.', error);
+        discoveryState.files.push(local); saveDiscoveryLocal(); if(!options.deferRender) renderRapidDiscoveryPreservingScroll(rapidSetId);
+      }
+    };
+
+    createDiscoveryResponseDocument = async function(requestId, file, meta){
+      if(!file) return;
+      const req = (discoveryState.requests || []).find(r => String(r.id) === String(requestId));
+      const realSet = req ? getDiscoverySetById(req.discovery_set_id) : getSelectedDiscoverySet();
+      const phase = meta?.phase || dsfrActivePhase(realSet?.id || discoveryState.selectedSetId || '');
+      dsfrSetActivePhase(realSet?.id || discoveryState.selectedSetId || '', phase);
+      const suppNo = dsfrPhaseNumber(phase);
+      const isSupp = suppNo > 0;
+      const name = String(meta?.name || file.name || 'Discovery response document').trim();
+      const docDate = meta?.date || null;
+      const desc = String(meta?.description || '').trim();
+      let created = null;
+      try{
+        if(window.createDocument){
+          created = await window.createDocument({ name, docDate, description: desc, status:'neither' });
+          if(!created) throw new Error('Could not create document row.');
+          const path = await window.uploadDocumentFile(created.id, file);
+          if(!path) throw new Error('Document row created, but file upload failed.');
+          const updated = await window.updateDocumentRow(created.id, { file_path:path, original_file_name:file.name || '', mime_type:file.type || '', file_size:Number(file.size || 0) || 0, description:desc, doc_date:docDate });
+          created = updated || { ...created, file_path:path, original_file_name:file.name || '', mime_type:file.type || '', file_size:Number(file.size || 0) || 0 };
+        }
+      }catch(error){ console.warn('Could not create normal document for discovery response; falling back to direct file record.', error); }
+      const safeName = sanitizeFileName(file.name || 'file');
+      const storedFileName = isSupp ? markSupplementalDiscoveryFileName(file.name || safeName || 'file') : (file.name || safeName);
+      const local = { id:discoveryUid(), case_id:getCaseId(), request_id:requestId, response_id:null, document_id:created?.id || null, file_name:storedFileName, file_type:file.type || '', file_size:file.size || 0, file_path:created?.file_path || '', created_at:new Date().toISOString(), response_kind:isSupp ? 'supplemental' : 'original', is_supplemental:isSupp, discovery_phase:phase || 'original', supplement_number:suppNo || null };
+      try{
+        if(created?.id && realSet && req) await applyDiscoveryTagsToDocument(created.id, { ...realSet, __discoveryPhase: phase }, req);
+        if(!local.file_path && window.supabase){
+          const folder = isSupp ? `supplemental/${dsfrFolderName(realSet, phase)}` : 'responses';
+          const path = `${getCaseId()}/discovery/${folder}/${requestId}/${Date.now()}_${safeName}`;
+          const { error:upErr } = await supabase.storage.from(window.DOCUMENT_BUCKET || 'case-documents').upload(path, file, { upsert:true, contentType:file.type || undefined });
+          if(upErr) throw upErr;
+          local.file_path = path;
+        }
+        await discoveryInsertFileRecord(local);
+        if(window.loadTags) { try{ await window.loadTags(); }catch(e){} }
+        if(window.loadDocumentTags) { try{ await window.loadDocumentTags(); }catch(e){} }
+        if(window.loadDocuments) await window.loadDocuments();
+      }catch(error){ console.warn('Discovery file record failed; recorded locally only.', error); discoveryState.files.push(local); }
+      saveDiscoveryLocal(); renderDiscovery();
+    };
+
+    function dsfrRows(set, phaseArg='original'){
+      const phase = dsfrPhaseFromArg(set?.id || '', phaseArg);
+      const reqs = discoveryRequestsForSet(set.id, true);
+      const rows = [];
+      reqs.forEach(req => discoveryFilesForRequest(req.id, phase).filter(f => f.file_path).forEach(f => rows.push({ req, file:f, url:getDocumentPublicUrl(f.file_path) })));
+      rows.forEach((row, idx) => {
+        row.appearanceNumber = idx + 1;
+        row.key = discoveryFileStableKey(row.file);
+        row.displayName = `${idx + 1}. ${cleanDiscoveryStoredFileName(discoveryDocumentDisplayName(row.file))}`;
+        row.defaultName = discoveryDownloadNameForRow(set, row.req, row.file, row.appearanceNumber);
+      });
+      return rows;
+    }
+    discoveryUploadedDocumentRows = dsfrRows;
+
+    discoveryWordBlob = function(set, includeAttorneyNotes=true, phaseArg='original'){
+      const phase = dsfrPhaseFromArg(set?.id || '', phaseArg);
+      const allReqs = discoveryRequestsForSet(set.id, true);
+      const rowsForPhase = dsfrRows(set, phase);
+      const reqIdsWithFiles = new Set(rowsForPhase.map(row => String(row.req?.id || '')));
+      const reqs = phase === 'original' ? allReqs : allReqs.filter(req => reqIdsWithFiles.has(String(req.id)));
+      const discoveryNumberedNames = new Map(rowsForPhase.map(row => [discoveryFileStableKey(row.file), row.defaultName]));
+      const body = reqs.map(req => {
+        const resp = getDiscoveryResponse(req.id);
+        const files = discoveryFilesForRequest(req.id, phase);
+        const answer = normalizeDiscoveryType(req.request_type) === 'production' ? (resp.rfp_status || '') : (resp.client_response || '');
+        return `<h3>${escapeHtml(getDiscoveryLabel(req.request_type))} No. ${escapeHtml(req.request_number || '')}</h3><p><b>Request:</b> ${escapeHtml(req.request_text || '')}</p><p><b>Response required:</b> ${discoveryRequestRequiresResponse(req) ? 'Yes' : 'No'}</p><p><b>Attorney comments to client:</b> ${escapeHtml(req.attorney_notes || 'None')}</p><p><b>Client response:</b> ${escapeHtml(answer || '')}</p>${resp.rfp_upload_notes ? `<p><b>Uploaded-to note:</b> ${escapeHtml(resp.rfp_upload_notes)}</p>` : ''}${includeAttorneyNotes ? `<p><b>Notes to attorney:</b> ${escapeHtml(resp.client_comments || '')}</p>` : ''}<p><b>Files:</b> ${files.map(f => escapeHtml(discoveryNumberedNames.get(discoveryFileStableKey(f)) || cleanDiscoveryStoredFileName(f.file_name || ''))).join(', ') || 'None'}</p><hr>`;
+      }).join('') || '<p>No requests in this response package have associated documents.</p>';
+      const heading = phase === 'original' ? (set.title || 'Discovery Responses') : `${dsfrPhaseLabel(phase)} Responses - ${dsfrFolderName(set, phase)}`;
+      const html = `<!doctype html><html><head><meta charset="utf-8"><title>${escapeHtml(heading)}</title></head><body><h1>${escapeHtml(heading)}</h1>${phase !== 'original' ? '<p><b>Supplemental discovery:</b> This package only includes requests where supplemental documents have been added.</p>' : ''}<p><b>Type:</b> ${escapeHtml(getDiscoveryLabel(set.discovery_type))}</p><p><b>Date served/received:</b> ${escapeHtml(formatDateForDisplay(set.date_received || '') || '')}</p><p><b>Client due:</b> ${escapeHtml(formatDateForDisplay(set.client_due_date || '') || '')}</p><h2>Attorney instructions</h2><p>${escapeHtml(set.client_instructions || 'None')}</p>${body}</body></html>`;
+      return new Blob([html], { type:'application/msword' });
+    };
+    downloadDiscoveryWordForSet = function(setId=null, includeAttorneyNotes=true, phaseArg='original'){
+      const set = setId ? getDiscoverySetById(setId) : getSelectedDiscoverySet();
+      if(!set){ alert('Select a discovery set first.'); return; }
+      const phase = dsfrPhaseFromArg(set.id, phaseArg);
+      const blob = discoveryWordBlob(set, includeAttorneyNotes, phase);
+      const suffix = includeAttorneyNotes ? 'with_notes_to_attorney' : 'without_attorney_notes';
+      const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+      a.download = `${sanitizeFileName(phase === 'original' ? (set.title || 'discovery_responses') : dsfrFolderName(set, phase))}_${suffix}.doc`;
+      document.body.appendChild(a); a.click(); setTimeout(()=>{ URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+    };
+
+    openDiscoveryUploadedDocsWindow = function(setId, phaseArg='original'){
+      const set = getDiscoverySetById(setId);
+      if(!set){ alert('Select a discovery set first.'); return; }
+      const phase = dsfrPhaseFromArg(set.id, phaseArg);
+      const rows = dsfrRows(set, phase);
+      const reqIdsWithFiles = new Set(rows.map(row => String(row.req?.id || '')));
+      const reqs = discoveryRequestsForSet(set.id, true).filter(req => phase === 'original' || reqIdsWithFiles.has(String(req.id)));
+      const win = window.open('', '_blank', 'width=1100,height=800,scrollbars=yes,resizable=yes');
+      if(!win){ alert('Please allow popups to view uploaded documents.'); return; }
+      const safePhase = String(phase).replace(/'/g,"\\'");
+      const sections = reqs.map(req => {
+        const rr = rows.filter(row => String(row.req?.id || '') === String(req.id || ''));
+        return `<section style="border:1px solid #e2e8f0;border-radius:14px;padding:14px;margin:12px 0;background:#fff"><h2 style="margin:0 0 8px 0">Request ${escapeHtml(req.request_number || '')}</h2><div style="white-space:pre-wrap;margin-bottom:10px">${escapeHtml(req.request_text || '')}</div>${rr.length ? `<ul>${rr.map(row => `<li><a target="_blank" href="${escapeHtml(row.url)}">${escapeHtml(row.defaultName)}</a></li>`).join('')}</ul>` : `<p style="color:#64748b">No documents uploaded for this request.</p>`}</section>`;
+      }).join('') || '<p style="color:#64748b">No requests in this package have associated documents.</p>';
+      const title = phase === 'original' ? 'Uploaded documents' : `${dsfrPhaseLabel(phase)} uploaded documents`;
+      win.document.open();
+      win.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>${escapeHtml(title)}</title><style>body{font-family:Arial,sans-serif;margin:24px;color:#0f172a}button{border:1px solid #e2e8f0;border-radius:999px;background:#2563eb;color:white;padding:10px 14px;font-weight:700;cursor:pointer}.hint{color:#64748b}</style></head><body><h1>${escapeHtml(title)}</h1><p class="hint">${escapeHtml(phase === 'original' ? (set.title || '') : dsfrFolderName(set, phase))}</p><button onclick="window.opener.openDiscoveryDocumentDownloadWindow('${escapeHtml(set.id)}','${escapeHtml(safePhase)}')">Download documents</button>${sections}</body></html>`);
+      win.document.close();
+    };
+
+    discoveryLogRowsForSet = function(set, phaseArg='original'){
+      if(!set) return [];
+      const phase = dsfrPhaseFromArg(set.id, phaseArg);
+      const grouped = new Map();
+      dsfrRows(set, phase).forEach(row => {
+        const req = row.req || {};
+        const key = String(req.id || row.file?.request_id || row.file?.requestId || row.request_id || '');
+        if(!grouped.has(key)) grouped.set(key, { discoveryName: phase === 'original' ? (set.title || 'Discovery request') : dsfrFolderName(set, phase), requestNumber: `Request ${req.request_number || ''}`, fileNames: [] });
+        grouped.get(key).fileNames.push(row.defaultName);
+      });
+      return Array.from(grouped.values()).filter(row => row.fileNames.length);
+    };
+    openDiscoveryLogWindow = function(setId, phaseArg='original'){
+      const set = getDiscoverySetById(setId); if(!set){ alert('Select a discovery set first.'); return; }
+      const phase = dsfrPhaseFromArg(set.id, phaseArg);
+      const win = window.open('', '_blank', 'width=1200,height=800,scrollbars=yes,resizable=yes');
+      if(!win){ alert('Please allow popups to view the discovery log.'); return; }
+      const rows = discoveryLogRowsForSet(set, phase).map(row => {
+        const names = `<ul style="margin:0;padding-left:18px">${row.fileNames.map(name => `<li>${escapeHtml(name)}</li>`).join('')}</ul>`;
+        return `<tr><td>${escapeHtml(row.discoveryName)}</td><td>${escapeHtml(row.requestNumber)}</td><td>${names}</td></tr>`;
+      }).join('');
+      const title = phase === 'original' ? 'Original Discovery log' : `${dsfrPhaseLabel(phase)} Discovery log`;
+      win.document.open();
+      win.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>${escapeHtml(title)}</title><style>body{font-family:Arial,sans-serif;margin:24px;color:#0f172a}table{width:100%;border-collapse:collapse}th,td{border-bottom:1px solid #e2e8f0;padding:10px;text-align:left;vertical-align:top}th{background:#f8fbff}button{border:1px solid #e2e8f0;border-radius:999px;background:#2563eb;color:white;padding:10px 14px;font-weight:700;cursor:pointer;margin-right:8px}.hint{color:#64748b}.actions{display:flex;gap:8px;flex-wrap:wrap;margin:14px 0}</style></head><body><h1>${escapeHtml(title)}</h1><p class="hint">${escapeHtml(phase === 'original' ? (set.title || '') : dsfrFolderName(set, phase))}</p><div class="actions"><button onclick="window.opener.downloadDiscoveryLogCsv('${escapeHtml(set.id)}','${escapeHtml(phase)}')">Download CSV</button><button onclick="window.opener.downloadDiscoveryLogWord('${escapeHtml(set.id)}','${escapeHtml(phase)}')">Download Word doc table</button></div><table><thead><tr><th>Discovery request</th><th>Request number</th><th>Associated files</th></tr></thead><tbody>${rows || '<tr><td colspan="3">No requests with associated files.</td></tr>'}</tbody></table></body></html>`);
+      win.document.close();
+    };
+    downloadDiscoveryLogCsv = function(setId, phaseArg='original'){
+      const set = getDiscoverySetById(setId); if(!set){ alert('Select a discovery set first.'); return; }
+      const phase = dsfrPhaseFromArg(set.id, phaseArg);
+      const rows = discoveryLogRowsForSet(set, phase);
+      const csvRows = [['Discovery request','Request number','Associated files'], ...rows.map(row => [row.discoveryName, row.requestNumber, row.fileNames.join('; ')])];
+      const csv = csvRows.map(row => row.map(discoveryCsvEscape).join(',')).join('\r\n');
+      const blob = new Blob([csv], { type:'text/csv;charset=utf-8' });
+      const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `${sanitizeFileName(phase === 'original' ? (set.title || 'discovery_log') : dsfrFolderName(set, phase))}_discovery_log.csv`;
+      document.body.appendChild(a); a.click(); setTimeout(()=>{ URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+    };
+    downloadDiscoveryLogWord = function(setId, phaseArg='original'){
+      const set = getDiscoverySetById(setId); if(!set){ alert('Select a discovery set first.'); return; }
+      const phase = dsfrPhaseFromArg(set.id, phaseArg);
+      const rows = discoveryLogRowsForSet(set, phase);
+      const title = phase === 'original' ? (set.title || 'Discovery log') : `${dsfrPhaseLabel(phase)} Discovery log - ${dsfrFolderName(set, phase)}`;
+      const bodyRows = rows.map(row => `<tr><td>${escapeHtml(row.discoveryName)}</td><td>${escapeHtml(row.requestNumber)}</td><td>${escapeHtml(row.fileNames.join('; '))}</td></tr>`).join('') || '<tr><td colspan="3">No requests with associated files.</td></tr>';
+      const html = `<!doctype html><html><head><meta charset="utf-8"><title>${escapeHtml(title)}</title></head><body><h1>${escapeHtml(title)}</h1><table border="1" cellspacing="0" cellpadding="6"><thead><tr><th>Discovery request</th><th>Request number</th><th>Associated files</th></tr></thead><tbody>${bodyRows}</tbody></table></body></html>`;
+      const blob = new Blob([html], { type:'application/msword' });
+      const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `${sanitizeFileName(phase === 'original' ? (set.title || 'discovery_log') : dsfrFolderName(set, phase))}_discovery_log.doc`;
+      document.body.appendChild(a); a.click(); setTimeout(()=>{ URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+    };
+
+    openDiscoveryResponsesSmallWindow = function(setId, phaseArg='original'){
+      const set = getDiscoverySetById(setId); if(!set){ alert('Select a discovery set first.'); return; }
+      const phase = dsfrPhaseFromArg(setId, phaseArg);
+      dsfrSetActivePhase(setId, phase);
+      const win = window.open('', '_blank', 'width=460,height=460,scrollbars=yes,resizable=yes'); if(!win){ alert('Please allow popups to open response options.'); return; }
+      const safeId = String(set.id).replace(/'/g,"\\'");
+      const safePhase = String(phase).replace(/'/g,"\\'");
+      const title = phase === 'original' ? 'Responses' : `${dsfrPhaseLabel(phase)} Responses`;
+      const folder = dsfrFolderName(set, phase);
+      const count = dsfrRows(set, phase).length;
+      win.document.open();
+      win.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>${escapeHtml(title)}</title><style>body{font-family:Arial,sans-serif;margin:20px;color:#0f172a}button{display:block;width:100%;margin:8px 0;border:1px solid #e2e8f0;border-radius:12px;background:#fff;padding:10px 12px;font-weight:700;text-align:left;cursor:pointer}button:hover{background:#f8fbff}.hint{color:#64748b;font-size:13px;line-height:1.35}</style></head><body><h2>${escapeHtml(title)}</h2><p class="hint">${escapeHtml(folder)}</p><p class="hint">${phase === 'original' ? 'Original response package.' : `${count} supplemental document(s). These options only include requests where supplemental documents have been added.`}</p><button onclick="window.opener.downloadDiscoveryWordForSet('${safeId}', true, '${safePhase}')">Download responses with Notes to attorney</button><button onclick="window.opener.downloadDiscoveryWordForSet('${safeId}', false, '${safePhase}')">Download responses without attorney notes</button><button onclick="window.opener.openDiscoveryUploadedDocsWindow('${safeId}', '${safePhase}')">Uploaded documents</button><button onclick="window.opener.convertDiscoveryDocumentsToPdfsZip('${safeId}', '${safePhase}')">Convert documents to PDFs</button><button onclick="window.opener.openDiscoveryLogWindow('${safeId}', '${safePhase}')">Discovery log</button></body></html>`);
+      win.document.close();
+    };
+
+    openRapidDiscoveryWorksheet = function(setId, phase){
+      const finalPhase = phase || dsfrActivePhase(setId) || 'original';
+      dsfrSetActivePhase(setId, finalPhase);
+      const url = new URL(window.location.href); const caseId = getCaseId();
+      if(caseId) url.searchParams.set('case', caseId);
+      url.searchParams.set('view', 'discovery'); url.searchParams.set('rapidSet', String(setId || '')); url.searchParams.set('rapidOnly', '1'); url.searchParams.set('rapidPhase', finalPhase); url.searchParams.delete('worksheet');
+      const opened = window.open(url.toString(), '_blank');
+      try { if(opened) opened.opener = null; } catch(e){}
+      if(!opened) window.location.href = url.toString();
+    };
+
+    window.openDiscoveryResponsesForPhase = function(setId, phase){ dsfrSetActivePhase(setId, phase || 'original'); openDiscoveryResponsesSmallWindow(setId, phase || 'original'); };
+    window.openDiscoveryPhaseWorksheet = function(setId, phase){ dsfrSetActivePhase(setId, phase || 'original'); openRapidDiscoveryWorksheet(setId, phase || 'original'); };
+    window.selectDiscoveryPhaseAndMode = function(setId, phase, mode){
+      const finalPhase = phase || 'original';
+      dsfrSetActivePhase(setId, finalPhase);
+      if(finalPhase !== 'original') { try{ ensureClientDiscoveryResponseTagsForSet({ ...(getDiscoverySetById(setId) || {}), __discoveryPhase: finalPhase }, discoveryRequestsForSet(setId, true)); }catch(e){} }
+      selectDiscoverySet(setId, mode || (finalPhase !== 'original' ? 'supplemental' : 'client'));
+      try{ renderDiscovery(); }catch(e){}
+      try{ window.focus(); }catch(e){}
+    };
+  })();
+
   initializeCaseChatUi();
 
   setTimeout(async ()=>{
