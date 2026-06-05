@@ -13531,6 +13531,405 @@ const endpoint = `${SUPABASE_URL}/functions/v1/finalize-exhibit-packet`;
   window.renderInventory = renderInventory;
 
 
+
+  /* Supplemental-discovery phase/folder workflow patch */
+  (function installDiscoverySupplementPhaseWorkflow(){
+    if(window.__discoverySupplementPhaseWorkflowInstalled) return;
+    window.__discoverySupplementPhaseWorkflowInstalled = true;
+
+    function discoveryOrdinal(n){
+      n = Number(n || 1);
+      const v = n % 100;
+      if(v >= 11 && v <= 13) return n + 'th';
+      const last = n % 10;
+      return n + (last === 1 ? 'st' : last === 2 ? 'nd' : last === 3 ? 'rd' : 'th');
+    }
+    function discoveryPhaseKey(n){ return Number(n || 0) > 0 ? `supp${Number(n)}` : 'original'; }
+    function discoveryPhaseNumber(phase){
+      const m = String(phase || '').match(/supp(?:lement)?\s*([0-9]+)/i) || String(phase || '').match(/^([0-9]+)$/);
+      return m ? Math.max(1, Number(m[1] || 1)) : 0;
+    }
+    function discoveryResponsePhaseLabel(phase){
+      const n = discoveryPhaseNumber(phase);
+      return n ? `${discoveryOrdinal(n)} Supplemental` : 'Original Response';
+    }
+    function discoveryDateCompactForTag(set){
+      const raw = String(set?.date_received || set?.date || '').slice(0,10);
+      const m = raw.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+      if(m) return `${Number(m[2])}.${Number(m[3])}.${String(m[1]).slice(2)}`;
+      const m2 = String(set?.title || '').match(/(\d{1,2})[.\/-](\d{1,2})[.\/-](\d{2,4})/);
+      if(m2) return `${Number(m2[1])}.${Number(m2[2])}.${String(m2[3]).slice(-2)}`;
+      return 'Discovery';
+    }
+    function discoveryPhaseFolderName(set, phase){
+      const n = discoveryPhaseNumber(phase);
+      const abbr = String(getDiscoveryAbbr ? getDiscoveryAbbr(set?.discovery_type || '') : (set?.discovery_type || 'disc')).replace(/[^a-zA-Z0-9]/g,'').toLowerCase();
+      const base = `${discoveryDateCompactForTag(set)}${abbr || 'disc'}`;
+      return n ? `${discoveryOrdinal(n)}Supp${base}` : (typeof discoverySetTagName === 'function' ? discoverySetTagName(set) : (set?.title || base));
+    }
+    function activeDiscoveryPhaseForSet(setId){
+      try{
+        const params = new URLSearchParams(window.location.search || '');
+        const urlSet = params.get('rapidSet') || '';
+        const urlPhase = params.get('rapidPhase') || '';
+        if(urlPhase && (!urlSet || String(urlSet) === String(setId))) return urlPhase;
+      }catch(e){}
+      discoveryState.activeDiscoveryPhaseBySet = discoveryState.activeDiscoveryPhaseBySet || {};
+      return discoveryState.activeDiscoveryPhaseBySet[setId] || 'original';
+    }
+    function setActiveDiscoveryPhaseForSet(setId, phase){
+      discoveryState.activeDiscoveryPhaseBySet = discoveryState.activeDiscoveryPhaseBySet || {};
+      discoveryState.activeDiscoveryPhaseBySet[setId] = phase || 'original';
+      saveDiscoveryLocal();
+    }
+    function fileMatchesDiscoveryPhase(file, phase){
+      phase = phase || 'original';
+      const n = discoveryPhaseNumber(phase);
+      const rawPhase = String(file?.discovery_phase || file?.response_phase || file?.phase || '').toLowerCase();
+      const rawNum = Number(file?.supplement_number || file?.supplemental_number || file?.supplementNo || 0) || discoveryPhaseNumber(rawPhase);
+      if(n > 0){
+        if(rawNum) return rawNum === n;
+        if(rawPhase) return rawPhase === phase;
+        return n === 1 && isSupplementalDiscoveryFile(file);
+      }
+      return !isSupplementalDiscoveryFile(file) && !rawPhase && !rawNum;
+    }
+    function getSupplementPhasesForSet(set){
+      if(!set) return [];
+      const reqIds = new Set(discoveryRequestsForSet(set.id, true).map(r => String(r.id)));
+      const nums = new Set();
+      (discoveryState.files || []).forEach(f => {
+        if(!reqIds.has(String(f.request_id))) return;
+        const phase = String(f.discovery_phase || f.response_phase || f.phase || '');
+        const n = Number(f.supplement_number || f.supplemental_number || 0) || discoveryPhaseNumber(phase) || (isSupplementalDiscoveryFile(f) ? 1 : 0);
+        if(n) nums.add(n);
+      });
+      Object.entries(discoveryState.activeDiscoveryPhaseBySet || {}).forEach(([id, phase]) => { if(String(id) === String(set.id)){ const n = discoveryPhaseNumber(phase); if(n) nums.add(n); } });
+      return Array.from(nums).sort((a,b)=>a-b).map(n => discoveryPhaseKey(n));
+    }
+    function nextSupplementPhaseForSet(set){
+      const nums = getSupplementPhasesForSet(set).map(discoveryPhaseNumber).filter(Boolean);
+      const next = nums.length ? Math.max(...nums) + 1 : 1;
+      return discoveryPhaseKey(next);
+    }
+    async function ensureSupplementPhaseFolder(set, phase){
+      if(!set || !phase || phase === 'original') return;
+      setActiveDiscoveryPhaseForSet(set.id, phase);
+      try{ await ensureClientDiscoveryResponseTagsForSet(set, discoveryRequestsForSet(set.id, true)); }catch(e){ console.warn('Could not pre-create supplement tags.', e); }
+    }
+
+    const __oldDiscoveryFilesForRequest = discoveryFilesForRequest;
+    discoveryFilesForRequest = function(requestId, supplemental=null){
+      const req = (discoveryState.requests || []).find(r => String(r.id) === String(requestId));
+      const phase = typeof supplemental === 'string' ? supplemental : (supplemental === true ? activeDiscoveryPhaseForSet(req?.discovery_set_id || discoveryState.selectedSetId) : (supplemental === false ? 'original' : null));
+      if(!phase) return __oldDiscoveryFilesForRequest(requestId, supplemental);
+      return (discoveryState.files || []).filter(f => String(f.request_id) === String(requestId) && fileMatchesDiscoveryPhase(f, phase));
+    };
+
+    const __oldEnsureTags = ensureClientDiscoveryResponseTagsForSet;
+    ensureClientDiscoveryResponseTagsForSet = async function(set, reqs=[]){
+      const phase = activeDiscoveryPhaseForSet(set?.id || discoveryState.selectedSetId || '');
+      if(!phase || phase === 'original') return __oldEnsureTags(set, reqs);
+      const root = await ensureDiscoveryTag('Client Discovery Responses', null);
+      if(!root) return {};
+      const setTag = await ensureDiscoveryTag(discoveryPhaseFolderName(set, phase), root.id);
+      const reqTags = {};
+      if(setTag){
+        for(const req of (reqs || [])){
+          const reqTag = await ensureDiscoveryTag(discoveryRequestTagName(req), setTag.id);
+          if(reqTag) reqTags[req.id] = reqTag;
+        }
+      }
+      return { root, setTag, reqTags };
+    };
+
+    applyDiscoveryTagsToDocument = async function(docId, set, req){
+      const tags = await ensureClientDiscoveryResponseTagsForSet(set, [req]);
+      const ids = [tags.root?.id, tags.setTag?.id, tags.reqTags?.[req.id]?.id].filter(Boolean);
+      for(const tagId of ids){ try{ if(window.assignDocumentTag) await window.assignDocumentTag(docId, tagId); }catch(e){ console.warn('Could not assign discovery tag', tagId, e); } }
+      try{
+        if(window.updateDocumentRow && tags.root?.id && tags.setTag?.id){
+          const links = [{ tagId: tags.root.id, subtagId: tags.setTag.id }];
+          if(tags.reqTags?.[req.id]?.id) links.push({ tagId: tags.setTag.id, subtagId: tags.reqTags[req.id].id });
+          await window.updateDocumentRow(docId, { tag_links: links });
+        }
+      }catch(e){ console.warn('Could not save discovery tag links on document', e); }
+    };
+
+    async function discoveryInsertFileRecord(local){
+      if(window.supabase && discoveryState.supabaseOk){
+        let insertPayload = { ...local };
+        let { data, error } = await supabase.from('discovery_files').insert(insertPayload).select().single();
+        if(error && ['response_kind','is_supplemental','discovery_phase','supplement_number'].some(k => String(error.message || '').toLowerCase().includes(k))){
+          const { response_kind, is_supplemental, discovery_phase, supplement_number, ...fallbackPayload } = insertPayload;
+          const retry = await supabase.from('discovery_files').insert(fallbackPayload).select().single();
+          data = retry.data; error = retry.error;
+        }
+        if(error) throw error;
+        discoveryState.files.push({ ...local, ...(data || {}) });
+      } else {
+        discoveryState.files.push(local);
+      }
+    }
+
+    createDiscoveryResponseDocument = async function(requestId, file, meta){
+      if(!file) return;
+      const req = (discoveryState.requests || []).find(r => String(r.id) === String(requestId));
+      const set = req ? (discoveryState.sets || []).find(s => String(s.id) === String(req.discovery_set_id)) : getSelectedDiscoverySet();
+      const phase = meta?.phase || activeDiscoveryPhaseForSet(set?.id || discoveryState.selectedSetId || '');
+      const suppNo = discoveryPhaseNumber(phase);
+      const isSupp = suppNo > 0;
+      const name = String(meta?.name || file.name || 'Discovery response document').trim();
+      const docDate = meta?.date || null;
+      const desc = String(meta?.description || '').trim();
+      let created = null;
+      try{
+        if(window.createDocument){
+          created = await window.createDocument({ name, docDate, description: desc, status:'neither' });
+          if(!created) throw new Error('Could not create document row.');
+          const path = await window.uploadDocumentFile(created.id, file);
+          if(!path) throw new Error('Document row created, but file upload failed.');
+          const updated = await window.updateDocumentRow(created.id, { file_path:path, original_file_name:file.name || '', mime_type:file.type || '', file_size:Number(file.size || 0) || 0, description:desc, doc_date:docDate });
+          created = updated || { ...created, file_path:path, original_file_name:file.name || '', mime_type:file.type || '', file_size:Number(file.size || 0) || 0 };
+        }
+      }catch(error){ console.warn('Could not create normal document for discovery response; falling back to direct file record.', error); }
+      const safeName = sanitizeFileName(file.name || 'file');
+      const storedFileName = isSupp ? markSupplementalDiscoveryFileName(file.name || safeName || 'file') : (file.name || safeName);
+      const local = { id:discoveryUid(), case_id:getCaseId(), request_id:requestId, response_id:null, document_id:created?.id || null, file_name:storedFileName, file_type:file.type || '', file_size:file.size || 0, file_path:created?.file_path || '', created_at:new Date().toISOString(), response_kind:isSupp ? 'supplemental' : 'original', is_supplemental:isSupp, discovery_phase:phase || 'original', supplement_number:suppNo || null };
+      try{
+        if(created?.id && set && req) await applyDiscoveryTagsToDocument(created.id, set, req);
+        if(!local.file_path && window.supabase){
+          const folder = isSupp ? `supplemental/${discoveryPhaseFolderName(set, phase)}` : 'responses';
+          const path = `${getCaseId()}/discovery/${folder}/${requestId}/${Date.now()}_${safeName}`;
+          const { error:upErr } = await supabase.storage.from(window.DOCUMENT_BUCKET || 'case-documents').upload(path, file, { upsert:true, contentType:file.type || undefined });
+          if(upErr) throw upErr;
+          local.file_path = path;
+        }
+        await discoveryInsertFileRecord(local);
+        if(window.loadDocuments) await window.loadDocuments();
+      }catch(error){ console.warn('Discovery file record failed; recorded locally only.', error); discoveryState.files.push(local); }
+      saveDiscoveryLocal(); renderDiscovery();
+    };
+
+    rapidDiscoveryAssignedDocumentIdsForSet = function(setId){
+      const phase = activeDiscoveryPhaseForSet(setId);
+      const reqIds = new Set(discoveryRequestsForSet(setId, true).map(r => String(r.id)));
+      return new Set((discoveryState.files || []).filter(f => reqIds.has(String(f.request_id)) && f.document_id && fileMatchesDiscoveryPhase(f, phase)).map(f => String(f.document_id)));
+    };
+    function rapidStoreKey(setId){ return `${setId}::${activeDiscoveryPhaseForSet(setId)}`; }
+    rapidDiscoveryPendingAssignments = function(setId){
+      const raw = ((discoveryState.rapidPendingAssignmentsBySet || {})[rapidStoreKey(setId)]) || [];
+      return Array.isArray(raw) ? raw.filter(item => item && item.docId && item.requestId) : [];
+    };
+    setRapidDiscoveryAssignmentPending = function(setId, docId, requestId, pending){
+      discoveryState.rapidPendingAssignmentsBySet = discoveryState.rapidPendingAssignmentsBySet || {};
+      const keyName = rapidStoreKey(setId);
+      const list = rapidDiscoveryPendingAssignments(setId);
+      const key = rapidDiscoveryPendingKey(docId, requestId);
+      const next = list.filter(item => rapidDiscoveryPendingKey(item.docId, item.requestId) !== key);
+      if(pending) next.push({ docId:String(docId || ''), requestId:String(requestId || '') });
+      discoveryState.rapidPendingAssignmentsBySet[keyName] = next;
+      saveDiscoveryLocal();
+    };
+    commitRapidDiscoveryAssignments = async function(setId){
+      const pending = rapidDiscoveryPendingAssignments(setId);
+      if(!pending.length){ alert('Select or drop at least one document/request first.'); return; }
+      saveRapidDiscoveryScrollPosition(setId);
+      const seen = new Set();
+      const unique = pending.filter(item => { const key = rapidDiscoveryPendingKey(item.docId, item.requestId); if(seen.has(key)) return false; seen.add(key); return true; });
+      for(const item of unique){ await attachExistingMatterDocumentToDiscoveryRequest(item.requestId, item.docId, { deferRender:true }); }
+      discoveryState.rapidPendingAssignmentsBySet = discoveryState.rapidPendingAssignmentsBySet || {};
+      discoveryState.rapidPendingAssignmentsBySet[rapidStoreKey(setId)] = [];
+      saveDiscoveryLocal();
+      renderRapidDiscoveryPreservingScroll(setId);
+    };
+
+    attachExistingMatterDocumentToDiscoveryRequest = async function(requestId, docId, options = {}){
+      const doc = getRapidDiscoveryMatterDocuments().find(d => String(d.id) === String(docId));
+      const req = (discoveryState.requests || []).find(r => String(r.id) === String(requestId));
+      if(!doc || !req){ alert('Could not find that document or request.'); return; }
+      const set = getDiscoverySetById(req.discovery_set_id);
+      const rapidSetId = set ? set.id : '';
+      const phase = activeDiscoveryPhaseForSet(rapidSetId);
+      const suppNo = discoveryPhaseNumber(phase);
+      saveRapidDiscoveryScrollPosition(rapidSetId);
+      const duplicate = (discoveryState.files || []).some(f => String(f.request_id) === String(requestId) && String(f.document_id || '') === String(doc.id) && fileMatchesDiscoveryPhase(f, phase));
+      if(duplicate){ if(!options.deferRender) renderRapidDiscoveryPreservingScroll(rapidSetId); return; }
+      const local = { id: discoveryUid(), case_id: getCaseId(), request_id: requestId, response_id: null, document_id: doc.id, file_name: doc.name || getAnyDocumentOriginalFileName(doc) || 'Document', file_type: doc.mime_type || doc.mimeType || '', file_size: Number(doc.file_size || doc.fileSize || 0) || 0, file_path: getAnyDocumentFilePath(doc), created_at: new Date().toISOString(), response_kind:suppNo ? 'supplemental' : 'original', is_supplemental:!!suppNo, discovery_phase:phase || 'original', supplement_number:suppNo || null };
+      try{
+        if(set && req) await applyDiscoveryTagsToDocument(doc.id, set, req);
+        await discoveryInsertFileRecord(local);
+        saveDiscoveryLocal();
+        if(!options.deferRender) renderRapidDiscoveryPreservingScroll(rapidSetId);
+      }catch(error){
+        console.warn('Could not attach existing matter document to discovery request.', error);
+        discoveryState.files.push(local); saveDiscoveryLocal(); if(!options.deferRender) renderRapidDiscoveryPreservingScroll(rapidSetId);
+      }
+    };
+
+    openRapidDiscoveryWorksheet = function(setId, phase){
+      const set = getDiscoverySetById(setId);
+      const finalPhase = phase || activeDiscoveryPhaseForSet(setId) || 'original';
+      setActiveDiscoveryPhaseForSet(setId, finalPhase);
+      const url = new URL(window.location.href);
+      const caseId = getCaseId();
+      if(caseId) url.searchParams.set('case', caseId);
+      url.searchParams.set('view', 'discovery');
+      url.searchParams.set('rapidSet', String(setId || ''));
+      url.searchParams.set('rapidOnly', '1');
+      url.searchParams.set('rapidPhase', finalPhase);
+      url.searchParams.delete('worksheet');
+      const opened = window.open(url.toString(), '_blank');
+      try { if(opened) opened.opener = null; } catch(e){}
+      if(!opened) window.location.href = url.toString();
+    };
+
+    const __oldRenderRapidDiscoveryResponses = renderRapidDiscoveryResponses;
+    renderRapidDiscoveryResponses = function(set){
+      if(!set) return '';
+      const phase = activeDiscoveryPhaseForSet(set.id);
+      const phaseName = discoveryResponsePhaseLabel(phase);
+      const folderName = discoveryPhaseFolderName(set, phase);
+      let html = __oldRenderRapidDiscoveryResponses(set);
+      if(!html) return html;
+      html = html.replace(/Rapid Discovery Responses/g, 'Document Worksheet');
+      const reqs = discoveryRequestsForSet(set.id, true).filter(req => normalizeDiscoveryType(req.request_type) === 'production');
+      const side = reqs.length ? `<aside class="discoveryWorksheetRequestPanel"><div class="discoveryWorksheetRequestTab">Requests</div><div class="discoveryWorksheetRequestBody"><h3>Requests</h3><div class="hint">${escapeHtml(folderName)}</div>${reqs.map(req => `<section><b>Req. ${escapeHtml(req.request_number || '')}</b><div>${escapeHtml(req.request_text || '')}</div></section>`).join('')}</div></aside>` : '';
+      const banner = `<div class="rapidDiscoveryBox"><div class="rapidDiscoveryTop"><div><span class="rapidDiscoveryWindowNotice">${escapeHtml(phaseName)}</span><h3 style="margin:6px 0 2px 0">${escapeHtml(folderName)}</h3><div class="hint">This worksheet assigns documents to the tags/folders for this discovery response. Click a request cell or drag a document row onto a request column, then click Assign documents to requests.</div></div><button type="button" class="btnGhost" data-discovery-change-phase="${escapeHtml(set.id)}">Choose original/supplement</button></div></div>`;
+      return banner + side + html;
+    };
+
+    function bindRapidDiscoveryDragAndDrop(host){
+      (host || document).querySelectorAll('.rapidDiscoveryTable tbody tr').forEach(row => {
+        const docBtn = row.querySelector('[data-rapid-view-doc]');
+        const docId = docBtn ? docBtn.getAttribute('data-rapid-view-doc') : '';
+        if(!docId) return;
+        row.setAttribute('draggable','true');
+        row.addEventListener('dragstart', ev => { ev.dataTransfer.setData('text/plain', docId); ev.dataTransfer.effectAllowed = 'copy'; });
+      });
+      (host || document).querySelectorAll('[data-rapid-assign-req]').forEach(btn => {
+        const cell = btn.closest('td') || btn;
+        cell.addEventListener('dragover', ev => { ev.preventDefault(); cell.classList.add('rapidDiscoveryDropTarget'); });
+        cell.addEventListener('dragleave', () => cell.classList.remove('rapidDiscoveryDropTarget'));
+        cell.addEventListener('drop', ev => {
+          ev.preventDefault(); cell.classList.remove('rapidDiscoveryDropTarget');
+          const docId = ev.dataTransfer.getData('text/plain');
+          if(docId) toggleRapidDiscoveryAssignment(btn.getAttribute('data-rapid-assign-set'), docId, btn.getAttribute('data-rapid-assign-req'));
+        });
+      });
+      (host || document).querySelectorAll('[data-discovery-change-phase]').forEach(btn => btn.addEventListener('click', () => openDiscoveryResponseChooser(btn.getAttribute('data-discovery-change-phase'), 'respond')));
+    }
+
+    function choosePhaseAndMode(setId, phase, mode){
+      setActiveDiscoveryPhaseForSet(setId, phase || 'original');
+      if(phase && phase !== 'original') ensureSupplementPhaseFolder(getDiscoverySetById(setId), phase);
+      selectDiscoverySet(setId, mode || 'client');
+    }
+    window.selectDiscoveryPhaseAndMode = choosePhaseAndMode;
+    window.openDiscoveryPhaseWorksheet = function(setId, phase){ choosePhaseAndMode(setId, phase || 'original', (phase && phase !== 'original') ? 'supplemental' : 'client'); openRapidDiscoveryWorksheet(setId, phase || 'original'); };
+    window.createNextDiscoverySupplementAndOpen = async function(setId, purpose){
+      const set = getDiscoverySetById(setId);
+      if(!set) return;
+      const phase = nextSupplementPhaseForSet(set);
+      await ensureSupplementPhaseFolder(set, phase);
+      if(purpose === 'responses') openDiscoveryResponsesSmallWindow(setId, phase);
+      else { choosePhaseAndMode(setId, phase, 'supplemental'); openRapidDiscoveryWorksheet(setId, phase); }
+    };
+    window.openDiscoveryResponsesForPhase = function(setId, phase){ setActiveDiscoveryPhaseForSet(setId, phase || 'original'); openDiscoveryResponsesSmallWindow(setId, phase || 'original'); };
+
+    function openDiscoveryResponseChooser(setId, purpose='respond'){
+      const set = getDiscoverySetById(setId);
+      if(!set){ alert('Select a discovery set first.'); return; }
+      const phases = ['original', ...getSupplementPhasesForSet(set)];
+      const next = nextSupplementPhaseForSet(set);
+      const win = window.open('', '_blank', 'width=520,height=560,scrollbars=yes,resizable=yes');
+      if(!win){ alert('Please allow popups for this site.'); return; }
+      const safeId = String(set.id).replace(/'/g,"\\'");
+      const rows = phases.map(phase => {
+        const label = discoveryResponsePhaseLabel(phase);
+        const folder = discoveryPhaseFolderName(set, phase);
+        if(purpose === 'responses') return `<button onclick="window.opener.openDiscoveryResponsesForPhase('${safeId}','${phase}')">${escapeHtml(label)} - ${escapeHtml(folder)}</button>`;
+        return `<button onclick="window.opener.selectDiscoveryPhaseAndMode('${safeId}','${phase}','${phase === 'original' ? 'client' : 'supplemental'}')">Open response page: ${escapeHtml(label)}</button><button class="secondary" onclick="window.opener.openDiscoveryPhaseWorksheet('${safeId}','${phase}')">Open Document Worksheet: ${escapeHtml(folder)}</button>`;
+      }).join('');
+      const nextLabel = discoveryResponsePhaseLabel(next);
+      win.document.open();
+      win.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>Choose discovery response</title><style>body{font-family:Arial,sans-serif;margin:20px;color:#0f172a}button{display:block;width:100%;margin:8px 0;border:1px solid #e2e8f0;border-radius:12px;background:#2563eb;color:#fff;padding:10px 12px;font-weight:700;text-align:left;cursor:pointer}.secondary{background:#fff;color:#0f172a}.hint{color:#64748b;font-size:13px;line-height:1.35}.create{background:#16a34a;color:white}</style></head><body><h2>${purpose === 'responses' ? 'Which response package?' : 'Which discovery response?'}</h2><p class="hint">${escapeHtml(set.title || '')}</p>${rows}<hr><button class="create" onclick="window.opener.createNextDiscoverySupplementAndOpen('${safeId}','${purpose}')">Create ${escapeHtml(nextLabel)} / add another supplement</button></body></html>`);
+      win.document.close();
+    }
+    window.openDiscoveryResponseChooser = openDiscoveryResponseChooser;
+
+    renderDiscoveryDashboard = function(){
+      const host = $('discoveryDashboardHost'); if(!host) return;
+      const sets = discoveryState.sets || [];
+      if(!sets.length){ host.innerHTML = '<div class="empty">No discovery sets yet. Use the upload panel below to add one.</div>'; updateDiscoverySourceViewButton(); return; }
+      const types = ['disclosures','production','interrogatories','admissions'];
+      host.innerHTML = '<div style="overflow:auto"><table class="discoverySummaryTable"><thead><tr><th>Date Received</th><th>Client Response Due</th><th>Request for Disclosures</th><th>Request for Production</th><th>Interrogatories</th><th>Request for Admissions</th></tr></thead><tbody>' + sets.map(set => {
+        const selected = set.id === discoveryState.selectedSetId;
+        const counts = discoveryCompletionCounts(set);
+        const needsHelp = discoverySetNeedsHelp(set);
+        const cells = types.map(t => normalizeDiscoveryType(set.discovery_type) === t ? `<td class="center"><div class="discoveryCellStack"><button type="button" class="discoverySetNameBtn" data-discovery-choose-response="${escapeHtml(set.id)}" title="${escapeHtml(set.title || '')}">Respond to Discovery</button><div class="hint">${counts.complete} out of ${counts.total} questions responded to</div><div class="row" style="justify-content:center;gap:10px"><button type="button" class="discoveryResponsesMenuBtn" data-discovery-choose-responses="${escapeHtml(set.id)}">Responses ▾</button></div>${needsHelp ? `<button type="button" class="btnGhost mini" data-discovery-reset-help="${escapeHtml(set.id)}">Reset</button>` : ''}</div></td>` : '<td></td>').join('');
+        return `<tr class="${needsHelp ? 'discoverySetNeedsHelpRow' : ''}" style="${selected ? 'background:#f8fbff' : ''}"><td>${escapeHtml(formatDateForDisplay(set.date_received || '') || set.date_received || '')}</td><td>${renderDiscoveryDueCell(set)}</td>${cells}</tr>`;
+      }).join('') + '</tbody></table></div>';
+      host.querySelectorAll('[data-discovery-choose-response]').forEach(btn => btn.addEventListener('click', ()=> openDiscoveryResponseChooser(btn.getAttribute('data-discovery-choose-response'), 'respond')));
+      host.querySelectorAll('[data-discovery-choose-responses]').forEach(btn => btn.addEventListener('click', ()=> openDiscoveryResponseChooser(btn.getAttribute('data-discovery-choose-responses'), 'responses')));
+      host.querySelectorAll('[data-discovery-reset-help]').forEach(btn => btn.addEventListener('click', (e)=>{ e.preventDefault(); e.stopPropagation(); resetDiscoveryHelpForSet(btn.getAttribute('data-discovery-reset-help')); }));
+      updateDiscoverySourceViewButton();
+    };
+
+    function phaseArgToPhase(setId, phaseArg){
+      if(typeof phaseArg === 'string') return phaseArg;
+      if(phaseArg === true) return activeDiscoveryPhaseForSet(setId);
+      return 'original';
+    }
+    discoveryWordBlob = function(set, includeAttorneyNotes=true, phaseArg=false){
+      const phase = phaseArgToPhase(set?.id || '', phaseArg);
+      const reqs = discoveryRequestsForSet(set.id, true);
+      const discoveryNumberedNames = new Map(discoveryUploadedDocumentRows(set, phase).map(row => [discoveryFileStableKey(row.file), row.defaultName]));
+      const rows = reqs.map(req => { const resp = getDiscoveryResponse(req.id); const files = discoveryFilesForRequest(req.id, phase); const answer = normalizeDiscoveryType(req.request_type) === 'production' ? (resp.rfp_status || '') : (resp.client_response || ''); return `<h3>${escapeHtml(getDiscoveryLabel(req.request_type))} No. ${escapeHtml(req.request_number || '')}</h3><p><b>Request:</b> ${escapeHtml(req.request_text || '')}</p><p><b>Response required:</b> ${discoveryRequestRequiresResponse(req) ? 'Yes' : 'No'}</p><p><b>Attorney comments to client:</b> ${escapeHtml(req.attorney_notes || 'None')}</p><p><b>Client response:</b> ${escapeHtml(answer || '')}</p>${resp.rfp_upload_notes ? `<p><b>Uploaded-to note:</b> ${escapeHtml(resp.rfp_upload_notes)}</p>` : ''}${includeAttorneyNotes ? `<p><b>Notes to attorney:</b> ${escapeHtml(resp.client_comments || '')}</p>` : ''}<p><b>Files:</b> ${files.map(f => escapeHtml(discoveryNumberedNames.get(discoveryFileStableKey(f)) || cleanDiscoveryStoredFileName(f.file_name || ''))).join(', ') || 'None'}</p><hr>`; }).join('');
+      const heading = phase === 'original' ? (set.title || 'Discovery Responses') : `${discoveryResponsePhaseLabel(phase)} Responses - ${discoveryPhaseFolderName(set, phase)}`;
+      const html = `<!doctype html><html><head><meta charset="utf-8"><title>${escapeHtml(heading)}</title></head><body><h1>${escapeHtml(heading)}</h1>${phase !== 'original' ? '<p><b>Supplemental discovery:</b> This package is for new or updated responses/documents added after the original discovery response.</p>' : ''}<p><b>Type:</b> ${escapeHtml(getDiscoveryLabel(set.discovery_type))}</p><p><b>Date served/received:</b> ${escapeHtml(formatDateForDisplay(set.date_received || '') || '')}</p><p><b>Client due:</b> ${escapeHtml(formatDateForDisplay(set.client_due_date || '') || '')}</p><h2>Attorney instructions</h2><p>${escapeHtml(set.client_instructions || 'None')}</p>${rows}</body></html>`;
+      return new Blob([html], { type:'application/msword' });
+    };
+    downloadDiscoveryWordForSet = function(setId=null, includeAttorneyNotes=true, phaseArg=false){
+      const set = setId ? getDiscoverySetById(setId) : getSelectedDiscoverySet();
+      if(!set){ alert('Select a discovery set first.'); return; }
+      const phase = phaseArgToPhase(set.id, phaseArg);
+      const blob = discoveryWordBlob(set, includeAttorneyNotes, phase);
+      const suffix = includeAttorneyNotes ? 'with_notes_to_attorney' : 'without_attorney_notes';
+      const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+      a.download = `${sanitizeFileName(phase === 'original' ? (set.title || 'discovery_responses') : discoveryPhaseFolderName(set, phase))}_${suffix}.doc`;
+      document.body.appendChild(a); a.click(); setTimeout(()=>{ URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+    };
+    openDiscoveryResponsesSmallWindow = function(setId, phaseArg='original'){
+      const set = getDiscoverySetById(setId); if(!set){ alert('Select a discovery set first.'); return; }
+      const phase = phaseArgToPhase(setId, phaseArg);
+      const win = window.open('', '_blank', 'width=460,height=430,scrollbars=yes,resizable=yes'); if(!win){ alert('Please allow popups to open response options.'); return; }
+      const safeId = String(set.id).replace(/'/g,"\\'");
+      const safePhase = String(phase).replace(/'/g,"\\'");
+      const title = phase === 'original' ? 'Responses' : `${discoveryResponsePhaseLabel(phase)} Responses`;
+      const folder = discoveryPhaseFolderName(set, phase);
+      win.document.open();
+      win.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>${escapeHtml(title)}</title><style>body{font-family:Arial,sans-serif;margin:20px;color:#0f172a}button{display:block;width:100%;margin:8px 0;border:1px solid #e2e8f0;border-radius:12px;background:#fff;padding:10px 12px;font-weight:700;text-align:left;cursor:pointer}button:hover{background:#f8fbff}.hint{color:#64748b;font-size:13px;line-height:1.35}</style></head><body><h2>${escapeHtml(title)}</h2><p class="hint">${escapeHtml(folder)}</p><button onclick="window.opener.downloadDiscoveryWordForSet('${safeId}', true, '${safePhase}')">Download responses with Notes to attorney</button><button onclick="window.opener.downloadDiscoveryWordForSet('${safeId}', false, '${safePhase}')">Download responses without attorney notes</button><button onclick="window.opener.openDiscoveryUploadedDocsWindow('${safeId}', '${safePhase}')">Uploaded documents</button><button onclick="window.opener.convertDiscoveryDocumentsToPdfsZip('${safeId}', '${safePhase}')">Convert documents to PDFs</button><button onclick="window.opener.openDiscoveryLogWindow('${safeId}')">Discovery log</button></body></html>`);
+      win.document.close();
+    };
+
+    const __oldRenderDiscovery = renderDiscovery;
+    renderDiscovery = function(){
+      __oldRenderDiscovery();
+      const host = $('discoveryClientList') || document;
+      bindRapidDiscoveryDragAndDrop(host);
+      const phase = activeDiscoveryPhaseForSet(discoveryState.selectedSetId || '');
+      const set = getSelectedDiscoverySet();
+      if(set && $('discoveryClientSelectedPill')) $('discoveryClientSelectedPill').textContent = `${discoveryResponsePhaseLabel(phase)}: ${discoveryPhaseFolderName(set, phase)}`;
+    };
+    window.renderDiscovery = renderDiscovery;
+
+    const style = document.createElement('style');
+    style.textContent = `.discoveryWorksheetRequestPanel{position:fixed;right:0;top:170px;bottom:24px;width:42px;z-index:130;transition:width .18s ease;overflow:visible}.discoveryWorksheetRequestPanel:hover{width:min(520px,calc(100vw - 60px))}.discoveryWorksheetRequestTab{position:absolute;right:0;top:0;bottom:0;width:42px;display:flex;align-items:center;justify-content:center;writing-mode:vertical-rl;border:1px solid var(--border);border-radius:14px 0 0 14px;background:#2563eb;color:#fff;font-weight:900;box-shadow:var(--shadow2)}.discoveryWorksheetRequestBody{display:none;position:absolute;right:42px;top:0;bottom:0;width:min(480px,calc(100vw - 90px));overflow:auto;border:1px solid var(--border);border-radius:16px;background:#fff;box-shadow:var(--shadow2);padding:14px}.discoveryWorksheetRequestPanel:hover .discoveryWorksheetRequestBody{display:block}.discoveryWorksheetRequestBody section{border-bottom:1px solid var(--border);padding:10px 0;white-space:pre-wrap;line-height:1.35}.rapidDiscoveryDropTarget{background:rgba(37,99,235,.12)!important;box-shadow:inset 0 0 0 2px rgba(37,99,235,.45)}.rapidDiscoveryTable tbody tr[draggable="true"]{cursor:grab}`;
+    document.head.appendChild(style);
+  })();
+
+
   initializeCaseChatUi();
 
   setTimeout(async ()=>{
