@@ -15308,6 +15308,142 @@ const endpoint = `${SUPABASE_URL}/functions/v1/finalize-exhibit-packet`;
     renderDiscovery=function(){ const result=prevRenderDiscovery.apply(this, arguments); fsdDecorateRapidDom(); return result; };
     window.renderDiscovery=renderDiscovery;
     setInterval(fsdDecorateRapidDom, 750);
+
+    /* FINAL RAPID SUPPLEMENT COMMIT REPAIR: make Assign documents responsive even when
+       the discovery_files Supabase table rejects newer supplement columns.  The UI now
+       records the selected phase locally immediately, applies the correct document tags,
+       clears the pending selections, and only then tries a safe background insert. */
+    function fsdPhasePrefixName(name, phase){
+      const n = fsdPhaseNum(phase);
+      const raw = String(name || 'Document');
+      if(!n) return raw.replace(/^__SUPP\d+_DISCOVERY__/, '').replace(DISCOVERY_SUPPLEMENTAL_FILE_PREFIX, '');
+      if(n === 1) return raw.startsWith(DISCOVERY_SUPPLEMENTAL_FILE_PREFIX) ? raw : DISCOVERY_SUPPLEMENTAL_FILE_PREFIX + raw.replace(/^__SUPP\d+_DISCOVERY__/, '');
+      const clean = raw.replace(/^__SUPP\d+_DISCOVERY__/, '').replace(DISCOVERY_SUPPLEMENTAL_FILE_PREFIX, '');
+      return `__SUPP${n}_DISCOVERY__${clean}`;
+    }
+    const fsdPriorFilePhaseForPrefix = fsdFilePhase;
+    fsdFilePhase = function(file){
+      const raw = String(file?.discovery_phase || file?.response_phase || file?.phase || '').toLowerCase();
+      const direct = fsdPhaseNum(raw);
+      if(direct) return fsdPhaseKey(direct);
+      const num = Number(file?.supplement_number || file?.supplemental_number || file?.supplementNo || 0) || 0;
+      if(num) return fsdPhaseKey(num);
+      const name = String(file?.file_name || file?.name || '');
+      const m = name.match(/^__SUPP(\d+)_DISCOVERY__/i);
+      if(m && Number(m[1])) return fsdPhaseKey(Number(m[1]));
+      return fsdPriorFilePhaseForPrefix ? fsdPriorFilePhaseForPrefix(file) : 'original';
+    };
+    fsdFileMatches = function(file, phase){ phase=phase||'original'; const n=fsdPhaseNum(phase); const fp=fsdFilePhase(file); const fn=fsdPhaseNum(fp); return n ? fn===n : !fn; };
+    fileMatchesDiscoveryPhase = fsdFileMatches;
+    const fsdPriorCleanFileName = cleanDiscoveryStoredFileName;
+    cleanDiscoveryStoredFileName = function(name){ return fsdPriorCleanFileName(String(name||'').replace(/^__SUPP\d+_DISCOVERY__/, '')); };
+
+    async function fsdTryInsertDiscoveryFileInBackground(local){
+      if(!window.supabase || !discoveryState.supabaseOk) return;
+      const base = {
+        case_id: local.case_id,
+        request_id: local.request_id,
+        response_id: local.response_id || null,
+        document_id: local.document_id || null,
+        file_name: local.file_name || 'Document',
+        file_type: local.file_type || '',
+        file_size: Number(local.file_size || 0) || 0,
+        file_path: local.file_path || '',
+        created_at: local.created_at || new Date().toISOString()
+      };
+      const attempts = [
+        base,
+        (()=>{ const { created_at, ...x } = base; return x; })(),
+        (()=>{ const { created_at, response_id, ...x } = base; return x; })(),
+        (()=>{ const { created_at, response_id, document_id, ...x } = base; return x; })()
+      ];
+      let lastError = null;
+      for(const payload of attempts){
+        try{
+          const { data, error } = await supabase.from('discovery_files').insert(payload).select().single();
+          if(error){ lastError = error; continue; }
+          if(data){
+            const idx = (discoveryState.files || []).findIndex(f => String(f.id) === String(local.id));
+            if(idx >= 0){ discoveryState.files[idx] = { ...local, ...data, discovery_phase:local.discovery_phase, response_kind:local.response_kind, is_supplemental:local.is_supplemental, supplement_number:local.supplement_number, file_name:local.file_name } ; saveDiscoveryLocal(); }
+          }
+          return true;
+        }catch(e){ lastError = e; }
+      }
+      console.warn('Could not save discovery_files row to Supabase after safe fallbacks; local phase record remains active.', lastError);
+      return false;
+    }
+
+    attachExistingMatterDocumentToDiscoveryRequest = async function(requestId, docId, options={}){
+      const req=(discoveryState.requests||[]).find(r=>String(r.id)===String(requestId));
+      const set=req?fsdSet(req.discovery_set_id):null;
+      const phase = options.phase || fsdActive(set?.id || discoveryState.selectedSetId || '') || 'original';
+      const n=fsdPhaseNum(phase);
+      if(set?.id) fsdSetActive(set.id, phase);
+      const docs = (typeof getRapidDiscoveryMatterDocuments==='function'?getRapidDiscoveryMatterDocuments():[]);
+      const doc = docs.find(d=>String(d.id)===String(docId)) || (window.loadedDocuments||[]).find(d=>String(d.id)===String(docId));
+      if(!doc || !req || !set){ alert('Could not find that document or request.'); return; }
+      const duplicate=(discoveryState.files||[]).some(f=>String(f.request_id)===String(requestId) && String(f.document_id||'')===String(doc.id) && fsdFileMatches(f, phase));
+      if(duplicate) return;
+      try{ await applyDiscoveryTagsToDocument(doc.id, {...set,__discoveryPhase:phase}, req); }catch(e){ console.warn('Could not apply discovery tags before attaching document.', e); }
+      const displayName = doc.name || getAnyDocumentOriginalFileName(doc) || 'Document';
+      const local={
+        id: discoveryUid(),
+        case_id:getCaseId(),
+        request_id:requestId,
+        response_id:null,
+        document_id:doc.id,
+        file_name: fsdPhasePrefixName(displayName, phase),
+        file_type:doc.mime_type||doc.mimeType||'',
+        file_size:Number(doc.file_size||doc.fileSize||0)||0,
+        file_path:getAnyDocumentFilePath(doc),
+        created_at:new Date().toISOString(),
+        response_kind:n?'supplemental':'original',
+        is_supplemental:!!n,
+        discovery_phase:phase,
+        supplement_number:n||null
+      };
+      discoveryState.files = discoveryState.files || [];
+      discoveryState.files.push(local);
+      saveDiscoveryLocal();
+      fsdTryInsertDiscoveryFileInBackground(local);
+      if(!options.deferRender) renderRapidDiscoveryPreservingScroll(set.id);
+    };
+
+    commitRapidDiscoveryAssignments = async function(setId){
+      const phase = fsdActive(setId) || 'original';
+      const pending = rapidDiscoveryPendingAssignments(setId);
+      if(!pending.length){ alert('Select at least one document/request button first.'); return; }
+      const btn = document.querySelector('.rapidDiscoveryCommitBtn');
+      const oldText = btn ? btn.textContent : '';
+      if(btn){ btn.disabled = true; btn.textContent = 'Assigning documents...'; }
+      if(typeof saveRapidDiscoveryScrollPosition === 'function') saveRapidDiscoveryScrollPosition(setId);
+      let count = 0;
+      const seen=new Set();
+      try{
+        for(const item of pending){
+          const k=String(item.docId)+'::'+String(item.requestId);
+          if(seen.has(k)) continue;
+          seen.add(k);
+          await attachExistingMatterDocumentToDiscoveryRequest(item.requestId, item.docId, {deferRender:true, phase});
+          count++;
+        }
+        discoveryState.rapidPendingAssignmentsBySet = discoveryState.rapidPendingAssignmentsBySet || {};
+        discoveryState.rapidPendingAssignmentsBySet[setId] = [];
+        discoveryState.rapidPendingAssignmentsBySet[String(setId)+'::'+phase] = [];
+        saveDiscoveryLocal();
+        try{ if(window.loadDocumentTags) await window.loadDocumentTags(); }catch(e){}
+        renderRapidDiscoveryPreservingScroll(setId);
+        if(typeof toast === 'function') toast(`Assigned ${count} document/request link${count===1?'':'s'} to ${phase==='original'?'the original response':fsdPhaseLabel(phase)}.`);
+        else alert(`Assigned ${count} document/request link${count===1?'':'s'} to ${phase==='original'?'the original response':fsdPhaseLabel(phase)}.`);
+      }catch(e){
+        console.error('Rapid discovery assignment failed.', e);
+        alert('The assignment hit an error. I saved anything completed before the error. Check the console for details.');
+      }finally{
+        if(btn){ btn.disabled = false; btn.textContent = oldText || 'Assign documents to requests'; }
+      }
+    };
+    window.commitRapidDiscoveryAssignments = commitRapidDiscoveryAssignments;
+
   })();
 
   initializeCaseChatUi();
