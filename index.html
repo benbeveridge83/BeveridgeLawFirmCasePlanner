@@ -3374,9 +3374,9 @@ function normalizeState(){ state.tags = Array.isArray(state.tags) ? state.tags.f
     .slice()
     .sort((a,b)=>(a.rowDate||'').localeCompare(b.rowDate||'') || (a.title||'').localeCompare(b.title||''));
 }
-        function getPersonById(id){ return (state.people || []).find(p => p.id === id) || null; }
-    function getDocumentById(id){ return (state.documents || []).find(d => d.id === id) || null; }
-    function getElementById(id){ return (state.elements || []).find(e => e.id === id) || null; }
+        function getPersonById(id){ if(!window.__personByIdCache || window.__personByIdSource !== state.people){ window.__personByIdSource = state.people; window.__personByIdCache = new Map((state.people || []).map(p => [p.id, p])); } return window.__personByIdCache.get(id) || null; }
+    function getDocumentById(id){ if(!window.__docByIdCache || window.__docByIdSource !== state.documents){ window.__docByIdSource = state.documents; window.__docByIdCache = new Map((state.documents || []).map(d => [d.id, d])); } return window.__docByIdCache.get(id) || null; }
+    function getElementById(id){ if(!window.__elByIdCache || window.__elByIdSource !== state.elements){ window.__elByIdSource = state.elements; window.__elByIdCache = new Map((state.elements || []).map(e => [e.id, e])); } return window.__elByIdCache.get(id) || null; }
     function getElementPrimarySourceRef(el){ return Array.isArray(el?.sourceRefs) && el.sourceRefs.length ? el.sourceRefs[0] : null; }
     function normalizeSourceSearchText(value){ return String(value || '').replace(/\s+/g, ' ').trim().toLowerCase(); }
     function escapeRegExp(value){ return Array.from(String(value || '')).map(ch => /[A-Za-z0-9]/.test(ch) ? ch : ('\\' + ch)).join(''); }
@@ -10249,7 +10249,7 @@ function openStructuredDocEditor(docId){
   function loadTrialIssuesLocal(){ state.trialIssues = normalizeTrialIssuesState(state.trialIssues); }
   function saveTrialIssuesLocal(){ state.trialIssues = normalizeTrialIssuesState(state.trialIssues); scheduleTrialIssuesSupabaseSave(); }
   function getTrialIssuesRows(){ state.trialIssues = normalizeTrialIssuesState(state.trialIssues); return state.trialIssues.rows; }
-  function getTrialIssueRow(rowId){ return getTrialIssuesRows().find(row => row.id === rowId) || null; }
+  function getTrialIssueRow(rowId){ if(window.__trialIssuesRowMap && window.__trialIssuesRowMap.has(rowId)) return window.__trialIssuesRowMap.get(rowId) || null; return getTrialIssuesRows().find(row => row.id === rowId) || null; }
   function getTrialDisplayName(kind, id){ if(kind === 'person') return getPersonById(id)?.name || 'Missing person'; if(kind === 'element') return getElementById(id)?.name || 'Missing element'; if(kind === 'document') return getDocumentById(id)?.name || 'Missing document'; return 'Item'; }
   function getTrialTagLinkLabel(link){ const tagName = state.tags.find(t => t.id === link?.tagId)?.name || 'Tag'; const sub = link?.subtagId ? getSubtagPath(link.subtagId) : ''; return sub ? `${tagName} > ${sub}` : tagName; }
   function getTrialWitnessFilterState(){
@@ -10568,27 +10568,72 @@ function trialSideHasContent(row, side){
     if($('trialIssuesRightParty')) $('trialIssuesRightParty').value = state.trialIssues.rightPartyName || 'Leah Murski';
     if($('trialIssuesLeftHeader')) $('trialIssuesLeftHeader').textContent = state.trialIssues.leftPartyName || 'Matt Murski';
     if($('trialIssuesRightHeader')) $('trialIssuesRightHeader').textContent = state.trialIssues.rightPartyName || 'Leah Murski';
-    renderTrialWitnessFilterPanel();
-    const body = $('trialIssuesBody'); if(!body) return; const rows = getTrialIssuesRows(); $('trialIssuesEmpty').style.display = rows.length ? 'none' : ''; body.innerHTML = rows.map((row, idx) => {
-      if(!isTrialRowVisible(rows, idx)) return '';
+    const filterWrap = $('trialIssuesWitnessFilterWrap');
+    if(filterWrap && filterWrap.classList.contains('open')) renderTrialWitnessFilterPanel();
+    const body = $('trialIssuesBody'); if(!body) return;
+    const rows = getTrialIssuesRows();
+    if($('trialIssuesEmpty')) $('trialIssuesEmpty').style.display = rows.length ? 'none' : '';
+    const rowMap = new Map(rows.map(row => [row.id, row]));
+    const depthCache = new Map();
+    const visibleCache = new Map();
+    const oldGetTrialIssueRow = window.__fastOldGetTrialIssueRow || null;
+    window.__trialIssuesRowMap = rowMap;
+    function fastGetRow(id){ return rowMap.get(id) || null; }
+    function fastDepth(rowId){
+      if(depthCache.has(rowId)) return depthCache.get(rowId);
+      let depth = 0, current = fastGetRow(rowId), guard = 0;
+      while(current && current.parentRowId && guard++ < 500){
+        current = fastGetRow(current.parentRowId);
+        if(current) depth += 1;
+      }
+      depthCache.set(rowId, depth);
+      return depth;
+    }
+    function fastVisible(row, idx){
+      if(!row) return false;
+      if(visibleCache.has(row.id)) return visibleCache.get(row.id);
+      let current = row, guard = 0;
+      while(current && guard++ < 500){
+        const parentId = current.parentRowId || (current.type === 'position' ? current.positionParentId : '');
+        if(!parentId) break;
+        const parent = fastGetRow(parentId);
+        if(parent && parent.collapsed){ visibleCache.set(row.id, false); return false; }
+        current = parent;
+      }
+      visibleCache.set(row.id, true); return true;
+    }
+    const visibleRows = [];
+    rows.forEach((row, idx) => { if(fastVisible(row, idx)) visibleRows.push({ row, idx }); });
+    const DEFAULT_COUNT = 180;
+    if(!ui.trialIssuesVisibleCount || ui.trialIssuesVisibleCount < DEFAULT_COUNT) ui.trialIssuesVisibleCount = DEFAULT_COUNT;
+    if(ui.currentView !== 'trialissues') ui.trialIssuesVisibleCount = DEFAULT_COUNT;
+    const cap = Math.min(Number(ui.trialIssuesVisibleCount) || DEFAULT_COUNT, visibleRows.length);
+    const sliced = visibleRows.slice(0, cap);
+    const html = sliced.map(({row, idx}) => {
       const prev = rows[idx - 1] || null;
       const next = rows[idx + 1] || null;
       const startClass = (!prev || prev.type !== row.type) ? ' trialIssuesSectionStart' : '';
       const endClass = (!next || next.type !== row.type) ? ' trialIssuesSectionEnd' : '';
       if(row.type === 'relief'){
         const isSubrelief = !!row.parentRowId;
-        const depth = getTrialReliefDepth(row.id);
+        const depth = fastDepth(row.id);
         const reliefButtons = `${isSubrelief ? '' : `<button type="button" class="mini" data-trial-add-subrelief="${row.id}">+ Sub relief</button>`}<button type="button" class="mini" data-trial-add-position="${row.id}" data-trial-position-side="left">Add ${escapeHtml(state.trialIssues.leftPartyName || 'Left')} Position</button><button type="button" class="mini" data-trial-add-position="${row.id}" data-trial-position-side="right">Add ${escapeHtml(state.trialIssues.rightPartyName || 'Right')} Position</button><button type="button" class="mini" data-trial-add-below="${row.id}" data-trial-newtype="issue">+ Issue</button><button type="button" class="mini" data-trial-add-below="${row.id}" data-trial-newtype="entry">+ Row</button><button type="button" class="mini" data-trial-delete-row="${row.id}">Delete</button>`;
         return `<tr class="trialIssuesReliefRow ${isSubrelief ? 'trialIssuesSubreliefRow' : ''}${startClass}${endClass}" draggable="true" data-trial-row-id="${row.id}"><td colspan="4"><div class="trialIssuesReliefInner ${isSubrelief ? 'isSubrelief' : ''}" style="padding-left:${isSubrelief ? 0 : depth * 34}px"><span class="trialIssuesRowDrag">⋮⋮</span><button type="button" class="trialIssuesCollapseBtn" data-trial-toggle-collapse="${row.id}">${row.collapsed ? '＋' : '－'}</button><span contenteditable="true" data-trial-label="${row.id}" data-trial-type="relief">${escapeHtml(row.label || 'New relief')}</span>${renderTrialRowControl(reliefButtons, 'Options')}</div></td></tr>`;
       }
       if(row.type === 'issue') return `<tr class="trialIssuesIssueRow${startClass}${endClass}" draggable="true" data-trial-row-id="${row.id}"><td colspan="4"><div class="trialIssuesIssueInner"><span class="trialIssuesRowDrag">⋮⋮</span><button type="button" class="trialIssuesCollapseBtn" data-trial-toggle-collapse="${row.id}">${row.collapsed ? '＋' : '－'}</button><span contenteditable="true" data-trial-label="${row.id}" data-trial-type="issue">${escapeHtml(row.label || 'New issue / element / factor')}</span>${renderTrialRowControl(`<button type="button" class="mini" data-trial-add-position="${row.id}" data-trial-position-side="left">Add ${escapeHtml(state.trialIssues.leftPartyName || 'Left')} Position</button><button type="button" class="mini" data-trial-add-position="${row.id}" data-trial-position-side="right">Add ${escapeHtml(state.trialIssues.rightPartyName || 'Right')} Position</button><button type="button" class="mini" data-trial-add-below="${row.id}" data-trial-newtype="entry">+ Row</button><button type="button" class="mini" data-trial-delete-row="${row.id}">Delete</button>`, 'Options')}</div></td></tr>`;
-      if(row.type === 'position') return renderTrialPositionRow(row, getTrialIssueRow(row.positionParentId));
+      if(row.type === 'position') return renderTrialPositionRow(row, fastGetRow(row.positionParentId));
       const leftFooter = `<div style="margin-top:8px;display:flex;justify-content:space-between;gap:8px;align-items:center"><span class="trialIssuesRowDrag">⋮⋮</span><span class="trialIssuesSubtle">Side-by-side row</span>${renderTrialRowControl(`<button type="button" class="mini" data-trial-add-link="${row.id}" data-trial-side="left" data-trial-kind="element" data-trial-role="support">Add element</button><button type="button" class="mini" data-trial-toggle-classification="${row.id}" data-trial-side-toggle="left">${escapeHtml(getTrialClassificationToggleLabel(row, 'left'))}</button><button type="button" class="mini" data-trial-add-link="${row.id}" data-trial-side="left" data-trial-kind="document" data-trial-role="exhibit">Add document as exhibit</button><button type="button" class="mini" data-trial-add-link="${row.id}" data-trial-side="left" data-trial-kind="document" data-trial-role="impeachment">Add document as impeachment</button><button type="button" class="mini" data-trial-add-link="${row.id}" data-trial-side="left" data-trial-kind="document" data-trial-role="support">Add document as support</button><button type="button" class="mini" data-trial-add-below="${row.id}" data-trial-newtype="entry">+ Row below</button><button type="button" class="mini" data-trial-delete-row="${row.id}">Delete</button>`)}</div>`;
       const rightFooter = `<div style="margin-top:8px;display:flex;justify-content:flex-end;gap:8px;align-items:center">${renderTrialRowControl(`<button type="button" class="mini" data-trial-add-link="${row.id}" data-trial-side="right" data-trial-kind="element" data-trial-role="support">Add element</button><button type="button" class="mini" data-trial-toggle-classification="${row.id}" data-trial-side-toggle="right">${escapeHtml(getTrialClassificationToggleLabel(row, 'right'))}</button><button type="button" class="mini" data-trial-add-link="${row.id}" data-trial-side="right" data-trial-kind="document" data-trial-role="exhibit">Add document as exhibit</button><button type="button" class="mini" data-trial-add-link="${row.id}" data-trial-side="right" data-trial-kind="document" data-trial-role="impeachment">Add document as impeachment</button><button type="button" class="mini" data-trial-add-link="${row.id}" data-trial-side="right" data-trial-kind="document" data-trial-role="support">Add document as support</button><button type="button" class="mini" data-trial-delete-row="${row.id}">Delete</button>`)}</div>`;
       const leftEntryClass = trialSideHasContent(row, 'left') ? (row.leftClassification === 'response' ? 'leftResponse' : 'leftAssertion') : 'trialIssuesCellEmpty';
       const rightEntryClass = trialSideHasContent(row, 'right') ? (row.rightClassification === 'response' ? 'rightResponse' : 'rightAssertion') : 'trialIssuesCellEmpty';
       return `<tr class="trialIssuesEntryRow${startClass}${endClass}" draggable="true" data-trial-row-id="${row.id}"><td class="trialIssuesCellWitness">${renderTrialWitnessList(row.leftWitnessIds, row.id, 'left')}</td><td class="trialIssuesCellMain leftSide ${leftEntryClass}">${renderTrialMainCell(row, 'left')}${leftFooter}</td><td class="trialIssuesCellMain ${rightEntryClass}">${renderTrialMainCell(row, 'right')}${rightFooter}</td><td class="trialIssuesCellWitness">${renderTrialWitnessList(row.rightWitnessIds, row.id, 'right')}</td></tr>`;
-    }).join('');
+    });
+    if(cap < visibleRows.length){
+      html.push(`<tr><td colspan="4" style="text-align:center;padding:14px;background:#f8fbff"><button type="button" class="btnPrimary" id="trialIssuesLoadMoreRows">Load more Trial Issues rows (${visibleRows.length - cap} remaining)</button><button type="button" class="btnGhost" id="trialIssuesLoadAllRows" style="margin-left:8px">Load all</button></td></tr>`);
+    }
+    body.innerHTML = html.join('');
+    const more = $('trialIssuesLoadMoreRows'); if(more) more.onclick = () => { ui.trialIssuesVisibleCount = Math.min(visibleRows.length, cap + 180); renderTrialIssues(); };
+    const all = $('trialIssuesLoadAllRows'); if(all) all.onclick = () => { ui.trialIssuesVisibleCount = visibleRows.length; renderTrialIssues(); };
     renderTrialIssuesToc();
     bindTrialIssuesPage();
   }
@@ -11770,15 +11815,29 @@ const endpoint = `${SUPABASE_URL}/functions/v1/finalize-exhibit-packet`;
   function buildDirectComment(anchor, placeholder){ return '<div class="directCommentBox" contenteditable="true" data-direct-note="' + escapeHtml(anchor) + '" data-placeholder="' + escapeHtml(placeholder || 'Direct notes / questions / answer prep') + '">' + getDirectNote(anchor) + '</div>'; }
   function openDirectExhibitWindow(docId, side){
     const doc = getDocumentById(docId); if(!doc){ alert('Document not found.'); return; }
-    const label = (side === 'right' ? 'Leah-' : 'CP-') + getTrialIssueExhibitNumber(side, docId);
+    const label = (side === 'right' ? 'Leah-' : 'CP-') + (item.exhibitNumber || getTrialIssueExhibitNumber(side, docId));
     const filePath = typeof getDocumentFilePath === 'function' ? getDocumentFilePath(doc) : (doc.filePath || doc.file_path || '');
     const url = filePath && window.getDocumentPublicUrl ? window.getDocumentPublicUrl(filePath) : '';
     const w = window.open('', '_blank', 'width=900,height=760'); if(!w){ alert('Popup blocked. Allow popups for this site to open exhibit details.'); return; }
     const safeDocId = String(docId).replace(/'/g, "\'");
     w.document.write('<!doctype html><html><head><title>' + escapeHtml(label + ' - ' + (doc.name || 'Exhibit')) + '</title><style>body{font-family:Arial,sans-serif;margin:18px;line-height:1.45;color:#0f172a}.bar{display:flex;gap:8px;flex-wrap:wrap;margin:14px 0}.btn{display:inline-block;padding:9px 12px;border:1px solid #cbd5e1;border-radius:999px;background:#f8fafc;text-decoration:none;color:#0f172a;font-weight:700}.primary{background:#2563eb;color:white;border-color:#1d4ed8}.meta{color:#64748b;font-size:13px}.box{border:1px solid #e2e8f0;border-radius:14px;padding:12px;background:#fff;margin-top:10px}iframe{width:100%;height:520px;border:1px solid #e2e8f0;border-radius:12px}</style></head><body><h2>' + escapeHtml(label) + ' &mdash; ' + escapeHtml(doc.name || 'Exhibit') + '</h2><div class="meta">Date: ' + escapeHtml(formatDateForDisplay(doc.date || doc.doc_date || '') || 'No date') + '<br>File: ' + escapeHtml(doc.originalFileName || doc.filename || doc.file_name || 'No file attached') + '</div><div class="box"><b>Description</b><br>' + escapeHtml(doc.description || 'No description') + '</div><div class="bar">' + (url ? '<a class="btn primary" href="' + url + '" target="_blank" rel="noopener">Open exhibit in new window</a>' : '') + '<button class="btn" onclick="window.opener && window.opener.openDocumentEditModal && window.opener.openDocumentEditModal(\'' + safeDocId + '\')">Edit exhibit details</button></div>' + (url ? '<iframe src="' + url + '"></iframe>' : '<div class="box">No uploaded file is attached to this exhibit.</div>') + '</body></html>'); w.document.close(); }
-  function renderDirectExhibitBlock(item, side){ const row = item.row; const docId = item.docId; const anchor = directAnchorForExhibit(row, docId); const label = (side === 'right' ? 'Leah-' : 'CP-') + getTrialIssueExhibitNumber(side, docId); return '<div class="directExhibitBlock" data-direct-exhibit-block="' + escapeHtml(anchor) + '">' + buildDirectComment(anchor + ':comment', 'Comment / question setup above ' + label) + renderDirectQaList(anchor) + '<div class="directExhibitHeader"><button type="button" class="directExhibitChip" data-direct-open-exhibit="' + escapeHtml(docId) + '"><span class="directExhibitLabel">' + escapeHtml(label) + '</span><span class="directExhibitName">' + escapeHtml(item.docName) + '</span></button><span class="directExhibitActions"><button type="button" class="mini" data-direct-open-exhibit="' + escapeHtml(docId) + '">View details</button><button type="button" class="mini" data-direct-edit-exhibit="' + escapeHtml(docId) + '">Edit</button><button type="button" class="mini btnPrimary" data-direct-add-qa="' + escapeHtml(anchor) + '">+ Question above exhibit</button></span></div></div>'; }
+  function renderDirectExhibitBlock(item, side){ const row = item.row; const docId = item.docId; const anchor = directAnchorForExhibit(row, docId); const label = (side === 'right' ? 'Leah-' : 'CP-') + (item.exhibitNumber || getTrialIssueExhibitNumber(side, docId)); return '<div class="directExhibitBlock" data-direct-exhibit-block="' + escapeHtml(anchor) + '">' + buildDirectComment(anchor + ':comment', 'Comment / question setup above ' + label) + renderDirectQaList(anchor) + '<div class="directExhibitHeader"><button type="button" class="directExhibitChip" data-direct-open-exhibit="' + escapeHtml(docId) + '"><span class="directExhibitLabel">' + escapeHtml(label) + '</span><span class="directExhibitName">' + escapeHtml(item.docName) + '</span></button><span class="directExhibitActions"><button type="button" class="mini" data-direct-open-exhibit="' + escapeHtml(docId) + '">View details</button><button type="button" class="mini" data-direct-edit-exhibit="' + escapeHtml(docId) + '">Edit</button><button type="button" class="mini btnPrimary" data-direct-add-qa="' + escapeHtml(anchor) + '">+ Question above exhibit</button></span></div></div>'; }
+
+  function numberTrialIssueExhibitLinksForDirect(items){
+    const seen = new Set();
+    let n = 0;
+    (items || []).forEach(item => {
+      if(!item || !item.docId) return;
+      if(!seen.has(item.docId)){
+        seen.add(item.docId);
+        n += 1;
+      }
+      item.exhibitNumber = n;
+    });
+    return items || [];
+  }
   function renderDirectOutlinePage(){
-    updateDirectPartyButtons(); const host = $('directQuestionList'); const empty = $('directEmpty'); if(!host) return; const party = getActiveDirectParty(); const side = party === 'leah' ? 'right' : 'left'; const rows = (state.trialIssues && Array.isArray(state.trialIssues.rows)) ? state.trialIssues.rows : []; const linkMap = new Map(); const directLinks = (typeof getTrialIssueExhibitLinks === 'function') ? getTrialIssueExhibitLinks(side) : []; directLinks.forEach(item => { if(!linkMap.has(item.row.id)) linkMap.set(item.row.id, []); linkMap.get(item.row.id).push(item); }); if(empty) empty.style.display = rows.length ? 'none' : ''; if(!rows.length){ host.innerHTML = ''; return; } let reliefCount = 0, issueCount = 0; const html = [];
+    updateDirectPartyButtons(); const host = $('directQuestionList'); const empty = $('directEmpty'); if(!host) return; const party = getActiveDirectParty(); const side = party === 'leah' ? 'right' : 'left'; const rows = (state.trialIssues && Array.isArray(state.trialIssues.rows)) ? state.trialIssues.rows : []; const linkMap = new Map(); const directLinks = numberTrialIssueExhibitLinksForDirect((typeof getTrialIssueExhibitLinks === 'function') ? getTrialIssueExhibitLinks(side) : []); directLinks.forEach(item => { if(!linkMap.has(item.row.id)) linkMap.set(item.row.id, []); linkMap.get(item.row.id).push(item); }); if(empty) empty.style.display = rows.length ? 'none' : ''; if(!rows.length){ host.innerHTML = ''; return; } let reliefCount = 0, issueCount = 0; const html = [];
     html.push('<div class="hint">This is the Trial Issues with exhibits outline for ' + escapeHtml(getDirectPartyLabel()) + '. Exhibits shown here are the exhibit documents placed on ' + escapeHtml(getDirectPartyLabel()) + "'s side of the Trial Issues page.</div>"); html.push(renderDirectQaList('top'));
     rows.forEach(row => { const docs = linkMap.get(row.id) || []; const anchor = directAnchorForRow(row); let title = ''; let cls = 'reportEntry'; const label = getTrialRowLabelForReport(row); if(row.type === 'relief'){ reliefCount += 1; issueCount = 0; title = 'Heading ' + reliefCount + ': ' + label; cls = 'reportRelief'; } else if(row.type === 'issue'){ issueCount += 1; title = reliefCount + '.' + issueCount + ' ' + label; cls = 'reportIssue'; } else if(row.type === 'position'){ title = String(side === 'right' ? row.rightPositionText || row.positionText || '' : row.leftPositionText || row.positionText || '').replace(/<[^>]*>/g, '').trim() || label || 'Subheading'; cls = 'reportSubrelief'; } else { title = String(side === 'right' ? row.rightHeading || '' : row.leftHeading || '').trim() || (docs.length ? 'Entry row' : ''); cls = 'reportEntry'; } if(!title && !docs.length) return; html.push('<section class="directSection ' + cls + '" data-direct-section="' + escapeHtml(anchor) + '"><div class="directSectionTitle"><span>' + escapeHtml(title || 'Entry row') + '</span><span><button type="button" class="mini btnPrimary" data-direct-add-qa="' + escapeHtml(anchor) + '">+ Question below</button></span></div>' + buildDirectComment(anchor + ':comment', 'Comment / direct prep for this heading, subheading, or issue') + renderDirectQaList(anchor)); if(docs.length){ docs.forEach(doc => html.push(renderDirectExhibitBlock(doc, side))); } else html.push('<div class="hint">No exhibits under this row.</div>'); html.push('</section>'); });
     if(!directLinks.length) html.push('<div class="empty">No ' + escapeHtml(getDirectPartyLabel()) + ' exhibit documents have been added to the Trial Issues page yet.</div>'); host.innerHTML = html.join(''); bindDirectOutlineEvents(); }
@@ -11816,7 +11875,7 @@ const endpoint = `${SUPABASE_URL}/functions/v1/finalize-exhibit-packet`;
     const side = 'left';
     const rows = getDirect2RowsFromMatt();
     const linkMap = new Map();
-    const directLinks = (typeof getTrialIssueExhibitLinks === 'function') ? getTrialIssueExhibitLinks(side) : [];
+    const directLinks = numberTrialIssueExhibitLinksForDirect((typeof getTrialIssueExhibitLinks === 'function') ? getTrialIssueExhibitLinks(side) : []);
     directLinks.forEach(item => {
       const rowId = item?.row?.id || '';
       if(!rowId) return;
