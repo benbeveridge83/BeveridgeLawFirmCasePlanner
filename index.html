@@ -10428,10 +10428,22 @@ function openStructuredDocEditor(docId){
     syncCasePartyInputs();
   }
   function normalizeHtmlToPlainText(html){ const div = document.createElement('div'); div.innerHTML = String(html || ''); return (div.textContent || '').replace(/\s+/g, ' ').trim(); }
-  function loadTrialIssuesLocal(){ state.trialIssues = normalizeTrialIssuesState(state.trialIssues); }
-  function saveTrialIssuesLocal(){ state.trialIssues = normalizeTrialIssuesState(state.trialIssues); window.__trialIssuesEditingUntil = Date.now() + 1500; scheduleTrialIssuesSupabaseSave(); }
-  function getTrialIssuesRows(){ state.trialIssues = normalizeTrialIssuesState(state.trialIssues); return state.trialIssues.rows; }
-  function getTrialIssueRow(rowId){ if(window.__trialIssuesRowMap && window.__trialIssuesRowMap.has(rowId)) return window.__trialIssuesRowMap.get(rowId) || null; return getTrialIssuesRows().find(row => row.id === rowId) || null; }
+  function refreshTrialIssuesRowMap(){
+    try{
+      const rows = (state.trialIssues && Array.isArray(state.trialIssues.rows)) ? state.trialIssues.rows : [];
+      window.__trialIssuesRowMap = new Map(rows.map(row => [row.id, row]));
+    }catch(e){ window.__trialIssuesRowMap = new Map(); }
+  }
+  function loadTrialIssuesLocal(){ state.trialIssues = normalizeTrialIssuesState(state.trialIssues); refreshTrialIssuesRowMap(); }
+  function saveTrialIssuesLocal(){ state.trialIssues = normalizeTrialIssuesState(state.trialIssues); refreshTrialIssuesRowMap(); window.__trialIssuesEditingUntil = Date.now() + 3000; scheduleTrialIssuesSupabaseSave(); }
+  function getTrialIssuesRows(){ state.trialIssues = normalizeTrialIssuesState(state.trialIssues); refreshTrialIssuesRowMap(); return state.trialIssues.rows; }
+  function getTrialIssueRow(rowId){
+    const rows = (state.trialIssues && Array.isArray(state.trialIssues.rows)) ? state.trialIssues.rows : [];
+    const liveRow = rows.find(row => row.id === rowId) || null;
+    if(liveRow) return liveRow;
+    if(window.__trialIssuesRowMap && window.__trialIssuesRowMap.has(rowId)) return window.__trialIssuesRowMap.get(rowId) || null;
+    return null;
+  }
   function getTrialDisplayName(kind, id){ if(kind === 'person') return getPersonById(id)?.name || 'Missing person'; if(kind === 'element') return getElementById(id)?.name || 'Missing element'; if(kind === 'document') return getDocumentById(id)?.name || 'Missing document'; return 'Item'; }
   function getTrialTagLinkLabel(link){ const tagName = state.tags.find(t => t.id === link?.tagId)?.name || 'Tag'; const sub = link?.subtagId ? getSubtagPath(link.subtagId) : ''; return sub ? `${tagName} > ${sub}` : tagName; }
   function getTrialWitnessFilterState(){
@@ -11069,16 +11081,19 @@ ${entry.summary}`).toLowerCase().includes(q)) return false;
     bindTrialWitnessFilterToggle();
     renderTrialWitnessFilterPanel();
     document.querySelectorAll('[data-trial-label]').forEach(el => {
+      const rowId = el.getAttribute('data-trial-label');
       const saveLabel = (rerender)=>{
-        const row = getTrialIssueRow(el.getAttribute('data-trial-label')); if(!row) return;
+        const row = getTrialIssueRow(rowId); if(!row) return;
         const fallback = el.getAttribute('data-trial-type') === 'issue' ? 'New issue / element / factor' : 'New relief';
-        row.label = normalizeHtmlToPlainText(el.innerHTML || el.textContent || '') || fallback;
+        const typed = normalizeHtmlToPlainText(el.textContent || el.innerHTML || '');
+        row.label = typed || fallback;
         saveTrialIssuesLocal();
-        if(rerender) renderTrialIssues();
+        if(rerender && document.activeElement !== el) renderTrialIssues();
       };
+      el.addEventListener('focus', ()=> { window.__trialIssuesEditingUntil = Date.now() + 3000; });
       el.addEventListener('input', ()=> saveLabel(false));
       el.addEventListener('blur', ()=> saveLabel(true));
-      el.addEventListener('keydown', (ev)=>{ if(ev.key === 'Enter'){ ev.preventDefault(); el.blur(); } });
+      el.addEventListener('keydown', (ev)=>{ if(ev.key === 'Enter'){ ev.preventDefault(); saveLabel(true); el.blur(); } });
     });
     document.querySelectorAll('[data-trial-heading-row]').forEach(input => {
       input.addEventListener('input', ()=>{
