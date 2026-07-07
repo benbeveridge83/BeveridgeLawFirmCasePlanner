@@ -1664,6 +1664,8 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_KEY, {
     .directQaList{display:grid;gap:6px;}
     .directQaRow{border:1px solid rgba(37,99,235,.18);border-radius:12px;background:#fff;padding:8px;display:grid;grid-template-columns:26px minmax(220px,1fr) minmax(220px,1fr) auto;gap:8px;align-items:stretch;}
     .directQaRow.drop-before{box-shadow:inset 0 3px 0 var(--brand);}.directQaRow.drop-after{box-shadow:inset 0 -3px 0 var(--brand);}
+    .direct2QaRow{grid-template-columns:minmax(260px,1fr) minmax(260px,1fr);align-items:start;}
+    .direct2QaRow .directQaBox{min-height:44px;white-space:normal;overflow-wrap:anywhere;word-break:normal;}
     .directQaDrag{display:flex;align-items:center;justify-content:center;color:#94a3b8;cursor:grab;font-weight:900;}
     .directQaBox{min-height:44px;border:1px solid var(--border);border-radius:10px;padding:7px 9px;outline:none;background:#fff;line-height:1.35;font-size:13px;}
     .directQaBox:empty:before{content:attr(data-placeholder);color:var(--muted);}
@@ -1679,7 +1681,7 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_KEY, {
     #viewDirect button,#viewDirect .btnPrimary,#viewDirect .btnGhost,#viewDirect .mini,#viewDirect .directExhibitChip{color:#0f172a!important;text-shadow:none!important;}
     #viewDirect .btnPrimary{background:#dbeafe!important;border-color:rgba(37,99,235,.40)!important;}
     #viewDirect .btnPrimary:hover{background:#bfdbfe!important;color:#0f172a!important;}
-    @media (max-width: 900px){.directSection.reportSubrelief,.directSection.reportIssue,.directSection.reportEntry{margin-left:0}.directQaRow{grid-template-columns:1fr}.directQaDrag{display:none}}
+    @media (max-width: 900px){.directSection.reportSubrelief,.directSection.reportIssue,.directSection.reportEntry{margin-left:0}.directQaRow,.direct2QaRow{grid-template-columns:1fr}.directQaDrag{display:none}}
 
 
     /* Inventory and Appraisement */
@@ -1873,12 +1875,15 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_KEY, {
       </div>
       <div id="caseAdminPanel" class="card hidden" style="box-shadow:none;margin-top:16px">
         <div style="display:flex;justify-content:space-between;gap:10px;align-items:center;flex-wrap:wrap"><h2 style="margin:0">Case access</h2><span id="caseAdminTitle" class="pill"></span></div>
-        <div class="authMuted" style="margin:8px 0 12px 0">Add an already-registered user by email. This page grants case access; it does not create the login itself.</div>
-        <div style="display:grid;grid-template-columns:minmax(240px,1fr) 180px auto;gap:10px;align-items:end">
-          <div><div class="label">User email</div><input id="memberEmail" type="text" placeholder="existing user email" /></div>
+        <div class="authMuted" style="margin:8px 0 12px 0">Create the user's login, set the password, choose case permissions, and send an invite email with the login details.</div>
+        <div style="display:grid;grid-template-columns:minmax(240px,1fr) minmax(180px,.5fr) minmax(180px,.5fr) auto;gap:10px;align-items:end">
+          <div><div class="label">User email</div><input id="memberEmail" type="text" placeholder="user@email.com" /></div>
+          <div><div class="label">Temporary password</div><input id="memberPassword" type="text" placeholder="Set password" autocomplete="new-password" /></div>
           <div><div class="label">Role</div><select id="memberRole"><option value="user">User</option><option value="admin">Admin</option></select></div>
-          <div><button id="addMemberBtn" class="btnPrimary" type="button">Add user to case</button></div>
+          <div><button id="addMemberBtn" class="btnPrimary" type="button">Create user + invite</button></div>
         </div>
+        <div id="memberPermissionBox" class="checkGrid" style="margin-top:10px"></div>
+        <div class="authMuted" style="margin-top:8px">Requires the Supabase Edge Function <b>admin-create-case-user</b>. The function should use the service-role key server-side to create/update the auth user, upsert the profile/case_members row, and send the invite email.</div>
         <div id="caseMembersList" style="display:grid;gap:8px;margin-top:14px"></div>
       </div>
     </div>
@@ -2467,6 +2472,14 @@ function normalizeState(){ state.tags = Array.isArray(state.tags) ? state.tags.f
       const pieces = [authUi.currentCaseName, state.caseName, $('caseNameDisplay')?.textContent, document.title].map(v => String(v || '').toLowerCase());
       return pieces.some(v => v.includes('murski')) || String(getCaseId() || '').toLowerCase().includes('murski');
     }
+    function isGordonMatter(){
+      const pieces = [authUi.currentCaseName, state.caseName, $('caseNameDisplay')?.textContent, document.title].map(v => String(v || '').toLowerCase());
+      return pieces.some(v => v.includes('gordon')) || String(getCaseId() || '').toLowerCase().includes('gordon');
+    }
+    function updateDirectCaseSpecificButtons(){
+      const gordonBtn = $('directGordonPrepBtn');
+      if(gordonBtn) gordonBtn.style.display = isGordonMatter() ? '' : 'none';
+    }
     function updateDirectTabLabels(){
       const murski = isMurskiMatter();
       const directTab = $('tabMattDirect');
@@ -2474,6 +2487,7 @@ function normalizeState(){ state.tags = Array.isArray(state.tags) ? state.tags.f
       if(directTab) directTab.textContent = murski ? 'Matt Direct' : 'Client Direct';
       if(part2Tab) part2Tab.style.display = murski ? '' : 'none';
       if(!murski && ui.currentView === 'mattdirect2') setTab('mattdirect', { pushState:false });
+      updateDirectCaseSpecificButtons();
     }
     function applyCaseRoleVisibility(){
       const isAdmin = authUi.currentCaseRole === 'admin';
@@ -9593,6 +9607,37 @@ function openStructuredDocEditor(docId){
       throw new Error('Supabase did not finish loading.');
     }
 
+    function renderMemberPermissionCheckboxes(selectedKeys){
+      const host = $('memberPermissionBox');
+      if(!host) return;
+      const selected = new Set(normalizeCasePageAccess(selectedKeys || ['discovery']));
+      host.innerHTML = CASE_PAGE_ACCESS.map(page => '<label class="checkItem"><input type="checkbox" data-member-permission="' + escapeHtml(page.key) + '" ' + (selected.has(page.key) ? 'checked' : '') + ' /> <span>' + escapeHtml(page.label) + '</span></label>').join('');
+    }
+    function getSelectedMemberPermissions(){
+      const checked = Array.from(document.querySelectorAll('[data-member-permission]:checked')).map(cb => cb.getAttribute('data-member-permission')).filter(Boolean);
+      return checked.length ? checked : ['discovery'];
+    }
+    function makeInviteEmailText(email, password, role, pageAccess){
+      const caseName = authUi.currentCaseName || state.caseName || 'your case';
+      const url = window.location.origin + window.location.pathname;
+      const pages = CASE_PAGE_ACCESS.filter(p => (pageAccess || []).includes(p.key)).map(p => p.label).join(', ');
+      return `You have been added to ${caseName}.
+
+Login page: ${url}
+Username: ${email}
+Temporary password: ${password}
+Role: ${role}
+Pages: ${pages || 'Discovery'}
+
+Please sign in and change your password after logging in.`;
+    }
+    async function createCaseUserWithPasswordAndInvite({ email, password, role, pageAccess }){
+      const payload = { case_id: authUi.selectedCase, email, password, role, page_access: pageAccess, case_name: authUi.currentCaseName || state.caseName || '', invite_message: makeInviteEmailText(email, password, role, pageAccess) };
+      const { data, error } = await window.supabase.functions.invoke('admin-create-case-user', { body: payload });
+      if(error) throw error;
+      return data || {};
+    }
+
     async function bootAuthStartup(){
       await waitForSupabaseReady();
       load();
@@ -9608,6 +9653,8 @@ function openStructuredDocEditor(docId){
       $('dashboardBtn')?.addEventListener('click', ()=> openDashboardFromApp());
       $('signOutBtn')?.addEventListener('click', async ()=>{ await window.supabase.auth.signOut(); localStorage.removeItem('murski_selected_case_id'); const url = new URL(window.location.href); url.searchParams.delete('case'); window.location.href = url.pathname; });
       $('dashboardRefreshBtn')?.addEventListener('click', ()=> queueDashboardDataLoad());
+      renderMemberPermissionCheckboxes(['discovery']);
+      $('memberRole')?.addEventListener('change', ()=> renderMemberPermissionCheckboxes(($('memberRole')?.value || 'user') === 'admin' ? getAllCasePageKeys() : ['discovery']));
       $("authSignInBtn")?.addEventListener("click", async ()=>{ try{ const email = $("authEmail").value.trim(); const password = $("authPassword").value; if(!email || !password) throw new Error("Enter your email and password."); const { data, error } = await window.supabase.auth.signInWithPassword({ email, password }); if(error) throw error; authUi.session = data?.session || null; routeAfterAuth(); toast("Signed in"); }catch(e){ alert((e && e.message) ? e.message : String(e || "Login failed.")); } });
       $('authSignUpBtn')?.addEventListener('click', async ()=>{ try{ const email = $('authSignupEmail').value.trim(); const password = $('authSignupPassword').value; const { error } = await window.supabase.auth.signUp({ email, password, options: { emailRedirectTo: window.location.origin + window.location.pathname } }); if(error) throw error; alert('Login created. The user can sign in after email confirmation if your Supabase project requires it.'); }catch(e){ alert(e.message || e); } });
       $('authResetPwBtn')?.addEventListener('click', async ()=>{ try{ const email = ($('authEmail').value || $('authSignupEmail').value || '').trim(); if(!email) throw new Error('Enter the email first.'); const { error } = await window.supabase.auth.resetPasswordForEmail(email, { redirectTo: window.location.origin + window.location.pathname + '?recovery=1' }); if(error) throw error; alert('Password reset email sent.'); }catch(e){ alert(e.message || e); } });
@@ -9616,23 +9663,22 @@ function openStructuredDocEditor(docId){
         try{
           if(!authUi.selectedCase) throw new Error('Choose a case first.');
           const email = $('memberEmail').value.trim().toLowerCase();
+          const password = ($('memberPassword')?.value || '').trim();
           const role = $('memberRole').value || 'user';
+          const pageAccess = role === 'admin' ? getAllCasePageKeys() : getSelectedMemberPermissions();
           if(!email) throw new Error('Enter the user email.');
-          const { data: profile, error: profileError } = await window.supabase.from('profiles').select('*').ilike('email', email).maybeSingle();
-          if(profileError) throw profileError;
-          if(!profile || !profile.id) throw new Error('That email does not have a login/profile yet. Have them sign up first from the login box.');
-          const defaultPageAccess = role === 'admin' ? getAllCasePageKeys() : ['discovery'];
-          let memberWrite = await window.supabase.from('case_members').upsert({ case_id: authUi.selectedCase, user_id: profile.id, role, page_access: defaultPageAccess }, { onConflict:'case_id,user_id' });
-          if(memberWrite.error){
-            console.warn('case_members.page_access column not available yet; adding member without synced page access.', memberWrite.error);
-            memberWrite = await window.supabase.from('case_members').upsert({ case_id: authUi.selectedCase, user_id: profile.id, role }, { onConflict:'case_id,user_id' });
-            if(memberWrite.error) throw memberWrite.error;
-            setStoredCasePageAccess(profile.id, defaultPageAccess, authUi.selectedCase);
-          }
+          if(!password || password.length < 6) throw new Error('Set a temporary password of at least 6 characters.');
+          const result = await createCaseUserWithPasswordAndInvite({ email, password, role, pageAccess });
+          const profileId = result.user_id || result.profile_id || result.id || '';
+          if(profileId) setStoredCasePageAccess(profileId, pageAccess, authUi.selectedCase);
           $('memberEmail').value = '';
+          if($('memberPassword')) $('memberPassword').value = '';
           await loadCaseMembers(authUi.selectedCase);
-          toast(role === 'admin' ? 'Admin added to case' : 'User added to case with Discovery access by default');
-        }catch(e){ alert(e.message || e); }
+          toast('User created, permissions saved, and invite email sent.');
+        }catch(e){
+          const msg = (e && e.message) ? e.message : String(e || 'Could not create/invite user.');
+          alert(msg + '\n\nIf the Edge Function is not installed yet, create admin-create-case-user in Supabase with a service-role key.');
+        }
       });
       let sessionRes = null;
       try{
@@ -11989,7 +12035,7 @@ const endpoint = `${SUPABASE_URL}/functions/v1/finalize-exhibit-packet`;
     if($('directPageTitle')) $('directPageTitle').textContent = `${getDirectPartyLabel()} Direct`;
     if($('directTrialHelp')) $('directTrialHelp').textContent = `${getDirectPartyLabel()} Direct builder. Trial Issue exhibits appear under each heading; hover an exhibit to view or edit. Add question/answer rows anywhere and drag to reorder.`;
   }
-  function renderDirect(){ if(ui.currentView !== 'mattdirect' && ui.currentView !== 'direct') return; updateDirectPartyButtons(); renderExamBuilder('direct'); }
+  function renderDirect(){ if(ui.currentView !== 'mattdirect' && ui.currentView !== 'direct') return; updateDirectCaseSpecificButtons(); updateDirectPartyButtons(); renderExamBuilder('direct'); }
   $('directMattBtn')?.addEventListener('click', ()=> setActiveDirectParty('matt'));
   $('directLeahBtn')?.addEventListener('click', ()=> setActiveDirectParty('leah'));
   $('directAddQuestionBtn')?.addEventListener('click', ()=> addDirectItem('question'));
@@ -12231,7 +12277,7 @@ const endpoint = `${SUPABASE_URL}/functions/v1/finalize-exhibit-packet`;
   function renderDirect2QaList(anchor){
     const rows = getDirectQas().filter(q => q.anchor === anchor).sort((a,b)=>(Number(a.sortOrder)||0)-(Number(b.sortOrder)||0));
     if(!rows.length) return '';
-    return '<div class="directQaList">' + rows.map(q => '<div class="directQaRow" data-direct2-qa-id="' + escapeHtml(q.id) + '"><div class="directQaBox" style="min-height:0;">' + (direct2HasHtml(q.question) ? q.question : '<span class="hint">Question</span>') + '</div><div class="directQaBox" style="min-height:0;">' + (direct2HasHtml(q.answer) ? q.answer : '<span class="hint">Answer</span>') + '</div></div>').join('') + '</div>';
+    return '<div class="directQaList">' + rows.map(q => '<div class="directQaRow direct2QaRow" data-direct2-qa-id="' + escapeHtml(q.id) + '"><div class="directQaBox">' + (direct2HasHtml(q.question) ? q.question : '<span class="hint">Question</span>') + '</div><div class="directQaBox">' + (direct2HasHtml(q.answer) ? q.answer : '<span class="hint">Answer</span>') + '</div></div>').join('') + '</div>';
   }
   function renderDirect2ExhibitBlock(item, side){
     const row = item.row;
@@ -12244,6 +12290,7 @@ const endpoint = `${SUPABASE_URL}/functions/v1/finalize-exhibit-packet`;
   }
   function renderDirect2(){ if(ui.currentView !== 'mattdirect2') return;
     updateDirectTabLabels();
+    updateDirectCaseSpecificButtons();
     const host = $('direct2QuestionList');
     const empty = $('direct2Empty');
     if(!host) return;
