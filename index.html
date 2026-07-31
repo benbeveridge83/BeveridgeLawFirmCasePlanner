@@ -1833,7 +1833,7 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_KEY, {
   </style>
 </head>
 <body>
-  <div class="topbar"><div class="topbar-inner"><div class="brand"><div class="dot"></div><div><div id="appBrandTitle" style="font-size:18px; font-weight:900">Beveridge Law Firm – Case Planner</div><div id="appBrandSubtitle" class="pill" style="display:none"></div></div></div><div class="grow"></div><div id="authTopbar" class="authTopbar hidden"><span id="authUserBadge" class="pill"></span><button id="caseChatTopBtn" class="btnPrimary" type="button" style="display:none">Ask AI</button><button id="dashboardBtn" class="btnGhost" type="button">Dashboard</button><button id="signOutBtn" class="btnGhost" type="button">Sign out</button></div><div id="caseNameDisplay" class="caseName" style="font-weight:900;font-size:16px;padding:10px 12px;border:1px solid var(--border);border-radius:14px;background:#fff;min-height:42px">Case</div><input id="caseName" class="caseName" type="hidden" /><div id="adminTopbarTools" class="row"><button id="exportBtn" class="btnPrimary">Export JSON</button><button id="importBtn">Import JSON</button><button id="bulkImportElementsBtn">Bulk import elements to Supabase</button><button id="resetBtn" class="btnDanger">Reset (local)</button></div><input id="importFile" type="file" accept="application/json" style="display:none" /><input id="bulkImportElementsFile" type="file" accept="application/json" style="display:none" /></div></div>
+  <div class="topbar"><div class="topbar-inner"><div class="brand"><div class="dot"></div><div><div id="appBrandTitle" style="font-size:18px; font-weight:900">Beveridge Law Firm – Case Planner</div><div id="appBrandSubtitle" class="pill" style="display:none"></div><div class="pill" title="Case-isolated Direct Part 2 shared-sync repair">Direct2 Sync Fix 7.30.26</div></div></div><div class="grow"></div><div id="authTopbar" class="authTopbar hidden"><span id="authUserBadge" class="pill"></span><button id="caseChatTopBtn" class="btnPrimary" type="button" style="display:none">Ask AI</button><button id="dashboardBtn" class="btnGhost" type="button">Dashboard</button><button id="signOutBtn" class="btnGhost" type="button">Sign out</button></div><div id="caseNameDisplay" class="caseName" style="font-weight:900;font-size:16px;padding:10px 12px;border:1px solid var(--border);border-radius:14px;background:#fff;min-height:42px">Case</div><input id="caseName" class="caseName" type="hidden" /><div id="adminTopbarTools" class="row"><button id="exportBtn" class="btnPrimary">Export JSON</button><button id="importBtn">Import JSON</button><button id="bulkImportElementsBtn">Bulk import elements to Supabase</button><button id="resetBtn" class="btnDanger">Reset (local)</button></div><input id="importFile" type="file" accept="application/json" style="display:none" /><input id="bulkImportElementsFile" type="file" accept="application/json" style="display:none" /></div></div>
   <div id="authShell" class="authShell" style="display:none">
     <div id="authGate" class="card" style="display:none">
       <h2>Login</h2>
@@ -12218,6 +12218,11 @@ const endpoint = `${SUPABASE_URL}/functions/v1/finalize-exhibit-packet`;
   ];
   function gordonDirectCloneRow(row){ return normalizeTrialIssueRow({ ...row, leftWitnessIds:Array.isArray(row.leftWitnessIds) ? row.leftWitnessIds : [], rightWitnessIds:Array.isArray(row.rightWitnessIds) ? row.rightWitnessIds : [], leftLinks:Array.isArray(row.leftLinks) ? row.leftLinks : [], rightLinks:Array.isArray(row.rightLinks) ? row.rightLinks : [] }); }
   function importGordonDirectPrep(){
+    if(!isGordonMatter()){
+      alert('Gordon Direct Prep is locked to the Gordon matter. Nothing was added or changed in this case.');
+      return false;
+    }
+    if(!confirm('Add the Gordon-specific trial issues and direct-examination questions to this Gordon matter?')) return false;
     state.trialIssues = normalizeTrialIssuesState(state.trialIssues);
     if(!state.trialIssues.leftPartyName || state.trialIssues.leftPartyName === 'Client') state.trialIssues.leftPartyName = 'Brianna Gordon';
     if(!state.trialIssues.rightPartyName || state.trialIssues.rightPartyName === 'Opposing Party') state.trialIssues.rightPartyName = 'Cody Lee';
@@ -12249,8 +12254,15 @@ const endpoint = `${SUPABASE_URL}/functions/v1/finalize-exhibit-packet`;
 
 
   /* Murski Direct- Part 2: editable continuation of Matt Direct starting at original Heading 2. */
+  function isGordonImportedDirectRow(row){
+    const id = String(row?.id || row?.uid || '').toLowerCase();
+    return id.startsWith('gordon_');
+  }
   function getDirect2RowsFromMatt(){
-    const rows = (state.trialIssues && Array.isArray(state.trialIssues.rows)) ? state.trialIssues.rows : [];
+    const allRows = (state.trialIssues && Array.isArray(state.trialIssues.rows)) ? state.trialIssues.rows : [];
+    // Do not delete suspected cross-matter rows. Hide the known Gordon import rows outside
+    // the Gordon matter so any Murski content remains intact and recoverable.
+    const rows = isGordonMatter() ? allRows : allRows.filter(row => !isGordonImportedDirectRow(row));
     let reliefCount = 0;
     let include = false;
     return rows.filter(row => {
@@ -12260,6 +12272,69 @@ const endpoint = `${SUPABASE_URL}/functions/v1/finalize-exhibit-packet`;
       }
       return include;
     });
+  }
+
+  const direct2SharedLoadedCases = new Set();
+  let direct2AutoSaveTimer = null;
+  function backupDirect2LocalBeforeSharedLoad(){
+    try{
+      const caseId = getCaseId() || 'global';
+      const payload = { caseId, party:getActiveDirectParty(), notes:getDirectNotes(), qas:getDirectQas(), savedAt:new Date().toISOString() };
+      localStorage.setItem(`murski_direct2_recovery_${caseId}_${getActiveDirectParty()}`, JSON.stringify(payload));
+    }catch(e){ console.warn('Could not create Direct Part 2 recovery snapshot', e); }
+  }
+  function mergeDirect2Qas(localQas, remoteQas){
+    const merged = new Map();
+    (Array.isArray(localQas) ? localQas : []).forEach((q, i)=>{ if(q && q.id) merged.set(q.id, { ...q, sortOrder:Number.isFinite(Number(q.sortOrder)) ? Number(q.sortOrder) : i }); });
+    (Array.isArray(remoteQas) ? remoteQas : []).forEach((q, i)=>{ if(q && q.id) merged.set(q.id, { ...q, sortOrder:Number.isFinite(Number(q.sortOrder)) ? Number(q.sortOrder) : i }); });
+    return Array.from(merged.values()).sort((a,b)=>(Number(a.sortOrder)||0)-(Number(b.sortOrder)||0)).map((q,i)=>({ ...q, sortOrder:i }));
+  }
+  async function loadDirect2SharedNonDestructive(){
+    const client = typeof sb === 'function' ? sb() : window.supabase;
+    const caseId = typeof cid === 'function' ? cid() : getCaseId();
+    if(!client || !caseId) return false;
+    const marker = `${caseId}|${getActiveDirectParty()}`;
+    if(direct2SharedLoadedCases.has(marker)) return true;
+    direct2SharedLoadedCases.add(marker);
+    backupDirect2LocalBeforeSharedLoad();
+    setDirect2SyncStatus('Checking shared case data...', '');
+    const localNotes = getDirectNotes();
+    const localQas = getDirectQas();
+    const { data, error } = await client.from('direct_outline_pages').select('*').eq('case_id', caseId).eq('party', getActiveDirectParty()).maybeSingle();
+    if(error){
+      direct2SharedLoadedCases.delete(marker);
+      console.error('Direct Part 2 shared load error:', error);
+      setDirect2SyncStatus('Shared load failed; local recovery preserved', 'err');
+      return false;
+    }
+    if(!data){
+      if(Object.keys(localNotes || {}).length || (localQas || []).length){
+        await saveDirectOutlineToSupabase();
+        setDirect2SyncStatus('Local content preserved and shared', 'ok');
+      } else setDirect2SyncStatus('No shared content yet', 'ok');
+      return true;
+    }
+    const remoteNotes = data.notes_json && typeof data.notes_json === 'object' ? data.notes_json : {};
+    const remoteQas = Array.isArray(data.qas_json) ? data.qas_json : [];
+    // Remote values win on the same field/id, while unique local client work is retained.
+    const mergedNotes = { ...(localNotes || {}), ...remoteNotes };
+    const mergedQas = mergeDirect2Qas(localQas, remoteQas);
+    saveDirectNotes(mergedNotes);
+    saveDirectQas(mergedQas);
+    const hadUniqueLocal = Object.keys(localNotes || {}).some(k => !(k in remoteNotes)) || (localQas || []).some(q => q?.id && !remoteQas.some(r => r?.id === q.id));
+    if(hadUniqueLocal) await saveDirectOutlineToSupabase();
+    setDirect2SyncStatus(hadUniqueLocal ? 'Shared data loaded; local-only work preserved' : 'Shared case data loaded', 'ok');
+    renderDirect2();
+    return true;
+  }
+  function scheduleDirect2SharedSave(){
+    clearTimeout(direct2AutoSaveTimer);
+    direct2AutoSaveTimer = setTimeout(async ()=>{
+      captureDirect2EditorsToLocal();
+      setDirect2SyncStatus('Syncing shared changes...', '');
+      const ok = await saveDirectOutlineToSupabase();
+      setDirect2SyncStatus(ok ? 'Shared changes saved' : 'Shared save failed; local recovery preserved', ok ? 'ok' : 'err');
+    }, 1200);
   }
   function direct2PlainText(html){
     const tmp = document.createElement('div');
@@ -12328,6 +12403,8 @@ const endpoint = `${SUPABASE_URL}/functions/v1/finalize-exhibit-packet`;
   function renderDirect2(){ if(ui.currentView !== 'mattdirect2') return;
     try{ localStorage.setItem(getDirectPartyStorageKey(), 'matt'); }catch(e){}
     updateDirectTabLabels();
+    const sharedMarker = `${getCaseId() || ''}|${getActiveDirectParty()}`;
+    if(getCaseId() && !direct2SharedLoadedCases.has(sharedMarker)) setTimeout(()=> loadDirect2SharedNonDestructive(), 0);
     updateDirectCaseSpecificButtons();
     const host = $('direct2QuestionList');
     const empty = $('direct2Empty');
@@ -12387,11 +12464,11 @@ const endpoint = `${SUPABASE_URL}/functions/v1/finalize-exhibit-packet`;
     let dragId = '';
     host.addEventListener('blur', (ev)=>{
       const note = ev.target.closest('[data-direct2-note]');
-      if(note){ setDirectNote(note.getAttribute('data-direct2-note'), note.innerHTML || ''); setDirect2SyncStatus('Changes saved locally', 'ok'); return; }
+      if(note){ setDirectNote(note.getAttribute('data-direct2-note'), note.innerHTML || ''); setDirect2SyncStatus('Saved locally; sharing...', 'ok'); scheduleDirect2SharedSave(); return; }
       const q = ev.target.closest('[data-direct2-qa-question]');
-      if(q){ updateDirectQa(q.getAttribute('data-direct2-qa-question'), { question: typeof normalizeRichTextHtml === 'function' ? normalizeRichTextHtml(q.innerHTML || '') : (q.innerHTML || '') }); setDirect2SyncStatus('Changes saved locally', 'ok'); return; }
+      if(q){ updateDirectQa(q.getAttribute('data-direct2-qa-question'), { question: typeof normalizeRichTextHtml === 'function' ? normalizeRichTextHtml(q.innerHTML || '') : (q.innerHTML || '') }); setDirect2SyncStatus('Saved locally; sharing...', 'ok'); scheduleDirect2SharedSave(); return; }
       const a = ev.target.closest('[data-direct2-qa-answer]');
-      if(a){ updateDirectQa(a.getAttribute('data-direct2-qa-answer'), { answer: typeof normalizeRichTextHtml === 'function' ? normalizeRichTextHtml(a.innerHTML || '') : (a.innerHTML || '') }); setDirect2SyncStatus('Changes saved locally', 'ok'); }
+      if(a){ updateDirectQa(a.getAttribute('data-direct2-qa-answer'), { answer: typeof normalizeRichTextHtml === 'function' ? normalizeRichTextHtml(a.innerHTML || '') : (a.innerHTML || '') }); setDirect2SyncStatus('Saved locally; sharing...', 'ok'); scheduleDirect2SharedSave(); }
     }, true);
     host.addEventListener('click', (ev)=>{
       const add = ev.target.closest('[data-direct2-add-qa]');
