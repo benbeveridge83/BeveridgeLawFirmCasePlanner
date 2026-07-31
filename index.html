@@ -1833,7 +1833,7 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_KEY, {
   </style>
 </head>
 <body>
-  <div class="topbar"><div class="topbar-inner"><div class="brand"><div class="dot"></div><div><div id="appBrandTitle" style="font-size:18px; font-weight:900">Beveridge Law Firm – Case Planner</div><div id="appBrandSubtitle" class="pill" style="display:none"></div><div class="pill" title="Case-isolated Direct Part 2 shared-sync repair">Direct2 Sync Fix 7.30.26</div></div></div><div class="grow"></div><div id="authTopbar" class="authTopbar hidden"><span id="authUserBadge" class="pill"></span><button id="caseChatTopBtn" class="btnPrimary" type="button" style="display:none">Ask AI</button><button id="dashboardBtn" class="btnGhost" type="button">Dashboard</button><button id="signOutBtn" class="btnGhost" type="button">Sign out</button></div><div id="caseNameDisplay" class="caseName" style="font-weight:900;font-size:16px;padding:10px 12px;border:1px solid var(--border);border-radius:14px;background:#fff;min-height:42px">Case</div><input id="caseName" class="caseName" type="hidden" /><div id="adminTopbarTools" class="row"><button id="exportBtn" class="btnPrimary">Export JSON</button><button id="importBtn">Import JSON</button><button id="bulkImportElementsBtn">Bulk import elements to Supabase</button><button id="resetBtn" class="btnDanger">Reset (local)</button></div><input id="importFile" type="file" accept="application/json" style="display:none" /><input id="bulkImportElementsFile" type="file" accept="application/json" style="display:none" /></div></div>
+  <div class="topbar"><div class="topbar-inner"><div class="brand"><div class="dot"></div><div><div id="appBrandTitle" style="font-size:18px; font-weight:900">Beveridge Law Firm – Case Planner</div><div id="appBrandSubtitle" class="pill" style="display:none"></div><div class="pill" title="Direct Part 2 shared visibility and non-destructive recovery">Direct2 Shared Visibility Fix 7.30.26b</div></div></div><div class="grow"></div><div id="authTopbar" class="authTopbar hidden"><span id="authUserBadge" class="pill"></span><button id="caseChatTopBtn" class="btnPrimary" type="button" style="display:none">Ask AI</button><button id="dashboardBtn" class="btnGhost" type="button">Dashboard</button><button id="signOutBtn" class="btnGhost" type="button">Sign out</button></div><div id="caseNameDisplay" class="caseName" style="font-weight:900;font-size:16px;padding:10px 12px;border:1px solid var(--border);border-radius:14px;background:#fff;min-height:42px">Case</div><input id="caseName" class="caseName" type="hidden" /><div id="adminTopbarTools" class="row"><button id="exportBtn" class="btnPrimary">Export JSON</button><button id="importBtn">Import JSON</button><button id="bulkImportElementsBtn">Bulk import elements to Supabase</button><button id="resetBtn" class="btnDanger">Reset (local)</button></div><input id="importFile" type="file" accept="application/json" style="display:none" /><input id="bulkImportElementsFile" type="file" accept="application/json" style="display:none" /></div></div>
   <div id="authShell" class="authShell" style="display:none">
     <div id="authGate" class="card" style="display:none">
       <h2>Login</h2>
@@ -12060,9 +12060,42 @@ const endpoint = `${SUPABASE_URL}/functions/v1/finalize-exhibit-packet`;
     host.querySelectorAll('[data-direct-qa-question]').forEach(q => updateDirectQa(q.getAttribute('data-direct-qa-question'), { question: typeof normalizeRichTextHtml === 'function' ? normalizeRichTextHtml(q.innerHTML || '') : (q.innerHTML || '') }));
     host.querySelectorAll('[data-direct-qa-answer]').forEach(a => updateDirectQa(a.getAttribute('data-direct-qa-answer'), { answer: typeof normalizeRichTextHtml === 'function' ? normalizeRichTextHtml(a.innerHTML || '') : (a.innerHTML || '') }));
   }
+  const DIRECT2_ROWS_SNAPSHOT_KEY = '__direct2_trial_rows_snapshot__';
+  function getSafeDirect2RowsSnapshot(){
+    const rows = (state.trialIssues && Array.isArray(state.trialIssues.rows)) ? state.trialIssues.rows : [];
+    return rows.filter(row => !isGordonImportedDirectRow(row)).map(row => JSON.parse(JSON.stringify(row)));
+  }
+  function splitDirectNotesAndRows(rawNotes){
+    const source = rawNotes && typeof rawNotes === 'object' ? rawNotes : {};
+    const notes = { ...source };
+    const rows = Array.isArray(notes[DIRECT2_ROWS_SNAPSHOT_KEY]) ? notes[DIRECT2_ROWS_SNAPSHOT_KEY] : [];
+    delete notes[DIRECT2_ROWS_SNAPSHOT_KEY];
+    return { notes, rows };
+  }
+  function mergeRecoveredDirect2Rows(rows){
+    if(!Array.isArray(rows) || !rows.length) return false;
+    state.trialIssues = normalizeTrialIssuesState(state.trialIssues);
+    const existing = Array.isArray(state.trialIssues.rows) ? state.trialIssues.rows : [];
+    const byId = new Map(existing.map(row => [String(row?.id || row?.uid || ''), row]));
+    let changed = false;
+    rows.forEach(row => {
+      const id = String(row?.id || row?.uid || '');
+      if(!id || isGordonImportedDirectRow(row) || byId.has(id)) return;
+      existing.push(normalizeTrialIssueRow(JSON.parse(JSON.stringify(row))));
+      byId.set(id, row);
+      changed = true;
+    });
+    if(changed){
+      state.trialIssues.rows = existing;
+      saveTrialIssuesLocal();
+    }
+    return changed;
+  }
   function getDirectPayload(){
     captureDirectEditorsToLocal();
-    return { caseId: getCaseId() || '', party: getActiveDirectParty(), partyLabel: getDirectPartyLabel(), notes: getDirectNotes(), qas: getDirectQas(), savedAt: new Date().toISOString(), app: 'Murski Case Planner', page: 'matt_direct' };
+    const notes = { ...getDirectNotes() };
+    notes[DIRECT2_ROWS_SNAPSHOT_KEY] = getSafeDirect2RowsSnapshot();
+    return { caseId: getCaseId() || '', party: getActiveDirectParty(), partyLabel: getDirectPartyLabel(), notes, qas: getDirectQas(), savedAt: new Date().toISOString(), app: 'Murski Case Planner', page: 'matt_direct' };
   }
   function directSyncTableMissingMessage(error){
     const msg = error && error.message ? error.message : String(error || 'Unknown error');
@@ -12091,7 +12124,9 @@ const endpoint = `${SUPABASE_URL}/functions/v1/finalize-exhibit-packet`;
     const { data, error } = await client.from('direct_outline_pages').select('*').eq('case_id', caseId).eq('party', getActiveDirectParty()).maybeSingle();
     if(error){ console.error('Direct comments Supabase load error:', error); setDirectSyncStatus('Load failed', 'err'); alert(directSyncTableMissingMessage(error)); return false; }
     if(!data){ setDirectSyncStatus('No Supabase comments found', 'err'); alert('No saved Direct comments were found in Supabase for ' + getDirectPartyLabel() + ' Direct.'); return false; }
-    saveDirectNotes(data.notes_json && typeof data.notes_json === 'object' ? data.notes_json : {});
+    const loadedDirect = splitDirectNotesAndRows(data.notes_json);
+    saveDirectNotes(loadedDirect.notes);
+    mergeRecoveredDirect2Rows(loadedDirect.rows);
     saveDirectQas(Array.isArray(data.qas_json) ? data.qas_json : []);
     setDirectSyncStatus('Loaded comments from Supabase', 'ok');
     renderDirect();
@@ -12314,8 +12349,10 @@ const endpoint = `${SUPABASE_URL}/functions/v1/finalize-exhibit-packet`;
       } else setDirect2SyncStatus('No shared content yet', 'ok');
       return true;
     }
-    const remoteNotes = data.notes_json && typeof data.notes_json === 'object' ? data.notes_json : {};
+    const remoteDirect = splitDirectNotesAndRows(data.notes_json);
+    const remoteNotes = remoteDirect.notes;
     const remoteQas = Array.isArray(data.qas_json) ? data.qas_json : [];
+    mergeRecoveredDirect2Rows(remoteDirect.rows);
     // Remote values win on the same field/id, while unique local client work is retained.
     const mergedNotes = { ...(localNotes || {}), ...remoteNotes };
     const mergedQas = mergeDirect2Qas(localQas, remoteQas);
@@ -12410,8 +12447,9 @@ const endpoint = `${SUPABASE_URL}/functions/v1/finalize-exhibit-packet`;
     const empty = $('direct2Empty');
     if(!host) return;
     const rows = getDirect2RowsFromMatt();
-    if(empty) empty.style.display = rows.length ? 'none' : '';
-    if(!rows.length){ host.innerHTML = ''; return; }
+    const hasSavedDirect2Content = getDirectQas().length || Object.values(getDirectNotes()).some(value => direct2HasHtml(value));
+    if(empty) empty.style.display = (rows.length || hasSavedDirect2Content) ? 'none' : '';
+    if(!rows.length && !hasSavedDirect2Content){ host.innerHTML = ''; return; }
     const side = 'left';
     const linkMap = new Map();
     const directLinks = numberTrialIssueExhibitLinksForDirect((typeof getTrialIssueExhibitLinks === 'function') ? getTrialIssueExhibitLinks(side) : []);
@@ -12454,6 +12492,31 @@ const endpoint = `${SUPABASE_URL}/functions/v1/finalize-exhibit-packet`;
       docs.forEach(doc => html.push(renderDirect2ExhibitBlock(doc, side)));
       html.push('</section>');
     });
+    const renderedAnchors = new Set();
+    rows.forEach(row => {
+      const rowAnchor = directAnchorForRow(row);
+      renderedAnchors.add(rowAnchor);
+      renderedAnchors.add(rowAnchor + ':comment');
+      (linkMap.get(row.id) || []).forEach(doc => {
+        const exAnchor = directAnchorForExhibit(row, doc.docId);
+        renderedAnchors.add(exAnchor);
+        renderedAnchors.add(exAnchor + ':comment');
+      });
+    });
+    const orphanQas = getDirectQas().filter(q => q && q.anchor && !renderedAnchors.has(q.anchor));
+    const orphanNotes = Object.entries(getDirectNotes()).filter(([anchor, value]) => anchor && !renderedAnchors.has(anchor) && direct2HasHtml(value));
+    if(orphanQas.length || orphanNotes.length){
+      html.push('<section class="directSection reportSubrelief" data-direct2-recovered="true"><div class="directSectionTitle"><span>Recovered shared client content</span></div><div class="hint">These entries were saved by another user, but the matching heading structure was not yet available on this computer. Nothing has been deleted. They remain editable and will move under their original headings when the shared structure is received.</div>');
+      const orphanAnchors = Array.from(new Set(orphanQas.map(q => q.anchor).concat(orphanNotes.map(([a]) => a))));
+      orphanAnchors.forEach(anchor => {
+        html.push('<div class="directExhibitBlock"><div class="label">Saved location: ' + escapeHtml(anchor) + '</div>');
+        const noteValue = getDirectNotes()[anchor] || '';
+        if(direct2HasHtml(noteValue)) html.push(renderDirect2Comment(anchor, 'Recovered comment / direct prep'));
+        html.push(renderDirect2QaList(anchor));
+        html.push('</div>');
+      });
+      html.push('</section>');
+    }
     host.innerHTML = html.join('');
     bindDirect2CopiedEvents();
   }
